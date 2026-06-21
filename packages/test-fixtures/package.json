@@ -1,0 +1,12 @@
+{
+  "name": "@agent-team/test-fixtures",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "fake-agent-cli": "bin/fake-agent-cli.mjs"
+  },
+  "scripts": {
+    "check": "node bin/fake-agent-cli.mjs --role planner --once"
+  }
+}

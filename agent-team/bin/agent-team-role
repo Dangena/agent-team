@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROLE=${1:?role is required}
+PROJECT=${2:?project is required}
+TASK_FILE=${3:?task file is required}
+
+ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+export PATH="$ROOT/bin:$PATH"
+cd "$PROJECT"
+
+CODEX_BIN=${AGENT_TEAM_CODEX_BIN:-codex}
+CLAUDE_BIN=${AGENT_TEAM_CLAUDE_BIN:-claude}
+MIMO_BIN=${AGENT_TEAM_MIMO_BIN:-mimo}
+
+case "$ROLE" in
+  codex)
+    PROMPT=$(cat "$ROOT/prompts/codex-lead.md" "$TASK_FILE")
+    exec "$CODEX_BIN" -C "$PROJECT" "$PROMPT"
+    ;;
+  claude)
+    SYSTEM_PROMPT=$(cat "$ROOT/prompts/claude-worker.md")
+    exec "$CLAUDE_BIN" --name agent-team-claude \
+      --append-system-prompt "$SYSTEM_PROMPT" \
+      "Agent Team 已启动。请确认角色并保持待命，等待 Codex Lead 通过 tmux-bridge 下发 TASK。"
+    ;;
+  mimo)
+    SYSTEM_PROMPT=$(cat "$ROOT/prompts/mimo-reviewer.md")
+    mimo_args=("$PROJECT" --prompt "$SYSTEM_PROMPT")
+    case "${AGENT_TEAM_MIMO_TRUST:-}" in
+      1|true|TRUE|yes|YES) mimo_args+=(--trust) ;;
+    esac
+    exec "$MIMO_BIN" "${mimo_args[@]}"
+    ;;
+  *)
+    echo "unknown role: $ROLE" >&2
+    exit 2
+    ;;
+esac

@@ -1,0 +1,22 @@
+{
+  "name": "agent-team-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Desktop workspace for coordinating local CLI agent teams.",
+  "type": "module",
+  "scripts": {
+    "postinstall": "node scripts/fix-node-pty-permissions.mjs",
+    "dev": "pnpm --filter @agent-team/desktop dev",
+    "build": "pnpm --filter @agent-team/desktop build",
+    "typecheck": "pnpm --filter @agent-team/desktop typecheck",
+    "check": "node scripts/smoke-test.mjs",
+    "flow": "node scripts/fake-agent-flow.mjs",
+    "stress": "node scripts/bridge-stress.mjs",
+    "gate": "node scripts/approval-gate-smoke.mjs",
+    "test:unit": "vitest run packages",
+    "test": "pnpm test:unit && pnpm check && pnpm stress"
+  },
+  "devDependencies": {
+    "vitest": "^4.1.9"
+  }
+}

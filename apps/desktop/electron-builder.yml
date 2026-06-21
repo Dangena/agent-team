@@ -1,0 +1,30 @@
+appId: com.agentteam.desktop
+productName: Agent Team Desktop
+directories:
+  output: release
+files:
+  - out/**/*
+  - package.json
+asarUnpack:
+  - node_modules/node-pty/**/*
+extraResources:
+  - from: ../../resources/bin
+    to: bin
+    filter:
+      - agent-team-bridge.mjs
+  - from: ../../packages/test-fixtures/bin
+    to: test-fixtures
+    filter:
+      - fake-agent-cli.mjs
+mac:
+  category: public.app-category.developer-tools
+  target:
+    - dir
+    - zip
+win:
+  target:
+    - nsis
+    - zip
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true

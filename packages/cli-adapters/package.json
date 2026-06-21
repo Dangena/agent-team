@@ -1,0 +1,13 @@
+{
+  "name": "@agent-team/cli-adapters",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "dependencies": {
+    "@agent-team/agent-team-core": "workspace:*"
+  },
+  "scripts": {
+    "check": "node ../../scripts/smoke-test.mjs"
+  }
+}

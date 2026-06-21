@@ -1,0 +1,10 @@
+node_modules/
+.pnpm-store/
+dist/
+out/
+release/
+.vite/
+.DS_Store
+*.log
+coverage/
+tmp/

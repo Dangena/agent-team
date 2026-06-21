@@ -1,0 +1,4 @@
+interface:
+  display_name: "Agent Team"
+  short_description: "Coordinate planner, executor, and reviewer CLIs"
+  default_prompt: "Use $agent-team to coordinate a local coding task with planner, executor, reviewer roles and bridge-based handoffs."

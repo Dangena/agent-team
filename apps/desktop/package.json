@@ -1,0 +1,41 @@
+{
+  "name": "@agent-team/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local-first desktop workspace for coordinating CLI agent teams.",
+  "author": "Agent Team Desktop contributors",
+  "type": "module",
+  "main": "out/main/main.js",
+  "dependencies": {
+    "@agent-team/agent-host": "workspace:*",
+    "@agent-team/cli-adapters": "workspace:*",
+    "@agent-team/persistence": "workspace:*",
+    "@agent-team/platform": "workspace:*",
+    "@agent-team/protocol": "workspace:*",
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/xterm": "^6.0.0",
+    "node-pty": "^1.1.0",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7"
+  },
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "dist:mac": "pnpm build && electron-builder --mac dir zip",
+    "dist:win": "pnpm build && electron-builder --win nsis zip --x64 --config.npmRebuild=false",
+    "preview": "electron-vite preview",
+    "typecheck": "tsc --noEmit",
+    "check": "pnpm typecheck && pnpm build"
+  },
+  "devDependencies": {
+    "@types/node": "^24.13.2",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^5.2.0",
+    "electron": "^42.4.1",
+    "electron-builder": "^26.15.3",
+    "electron-vite": "^5.0.0",
+    "typescript": "^5.9.3",
+    "vite": "^7.3.5"
+  }
+}

@@ -1,0 +1,222 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+ROLE_LAUNCHER="$ROOT/bin/agent-team-role"
+BRIDGE="$ROOT/bin/tmux-bridge"
+
+die() { echo "agent-team: $*" >&2; exit 1; }
+
+# Optional named socket keeps an Agent Team isolated from the user's main tmux server.
+tmux() {
+  if [[ -n "${AGENT_TEAM_TMUX_SOCKET:-}" ]]; then
+    command tmux -L "$AGENT_TEAM_TMUX_SOCKET" "$@"
+  else
+    command tmux "$@"
+  fi
+}
+
+usage() {
+  cat <<'EOF'
+Agent Team: Codex lead + Claude executor + optional MiMo reviewer
+
+Usage:
+  agent-team start [--project DIR] [--session NAME] [--detach] [TASK...]
+  agent-team task [--session NAME] TASK...
+  agent-team add-mimo [--session NAME]
+  agent-team attach [--session NAME]
+  agent-team status [--session NAME]
+  agent-team stop [--session NAME]
+
+Defaults:
+  project: current directory
+  session: agent-<project-directory-name>
+
+Environment:
+  AGENT_TEAM_TMUX_SOCKET  optional isolated tmux socket name
+
+Examples:
+  cd my-project
+  agent-team start "实现登录限流并补充测试"
+  agent-team add-mimo
+  agent-team task "复核刚才的实现并处理审查意见"
+EOF
+}
+
+require_command() {
+  command -v "$1" >/dev/null 2>&1 || die "missing command: $1"
+}
+
+default_session() {
+  local project=$1 base
+  base=$(basename "$project" | tr -cs '[:alnum:]_-' '-')
+  printf 'agent-%s' "${base%-}"
+}
+
+session_exists() {
+  tmux has-session -t "=$1" 2>/dev/null
+}
+
+attach_session() {
+  local session=$1
+  if [[ -n "${TMUX:-}" ]]; then
+    tmux switch-client -t "=$session"
+  else
+    tmux attach-session -t "=$session"
+  fi
+}
+
+write_task() {
+  local file=$1 task=$2
+  {
+    printf '\n\n# Initial Task\n\n'
+    if [[ -n "$task" ]]; then
+      printf '%s\n' "$task"
+    else
+      printf '当前没有初始任务。保持 Lead 角色，等待用户输入需求。\n'
+    fi
+    printf '\n从检查仓库状态开始，然后按协议规划并分派任务。\n'
+  } > "$file"
+}
+
+pane_for_label() {
+  local session=$1 label=$2
+  tmux list-panes -t "=$session" -F '#{pane_id}|#{@name}' |
+    awk -F '|' -v label="$label" '$2 == label { print $1; exit }'
+}
+
+parse_session_only() {
+  SESSION=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -s|--session) [[ $# -ge 2 ]] || die "$1 requires a value"; SESSION=$2; shift 2 ;;
+      -h|--help) usage; exit 0 ;;
+      *) break ;;
+    esac
+  done
+  if [[ -z "$SESSION" ]]; then
+    SESSION=$(default_session "$PWD")
+  fi
+  REMAINING=("$@")
+}
+
+cmd_start() {
+  local project=$PWD session="" detach=false
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -p|--project) [[ $# -ge 2 ]] || die "$1 requires a value"; project=$2; shift 2 ;;
+      -s|--session) [[ $# -ge 2 ]] || die "$1 requires a value"; session=$2; shift 2 ;;
+      -d|--detach) detach=true; shift ;;
+      -h|--help) usage; exit 0 ;;
+      --) shift; break ;;
+      *) break ;;
+    esac
+  done
+
+  project=$(cd "$project" 2>/dev/null && pwd) || die "project directory not found: $project"
+  [[ -n "$session" ]] || session=$(default_session "$project")
+  session_exists "$session" && die "session '$session' already exists; use 'agent-team attach --session $session'"
+
+  require_command tmux
+  local codex_bin claude_bin
+  codex_bin=$(command -v "${AGENT_TEAM_CODEX_BIN:-codex}") || die "missing Codex CLI"
+  claude_bin=$(command -v "${AGENT_TEAM_CLAUDE_BIN:-claude}") || die "missing Claude CLI"
+
+  local runtime task_file task claude_cmd codex_cmd claude_pane codex_pane
+  runtime="${TMPDIR:-/tmp}/agent-team/$session"
+  mkdir -p "$runtime"
+  task_file="$runtime/task.md"
+  task="$*"
+  write_task "$task_file" "$task"
+
+  printf -v claude_cmd 'AGENT_TEAM_CLAUDE_BIN=%q %q %q %q %q' "$claude_bin" "$ROLE_LAUNCHER" claude "$project" "$task_file"
+  tmux new-session -d -s "$session" -n team -c "$project" "$claude_cmd" </dev/null >/dev/null 2>&1
+  claude_pane=$(tmux display-message -t "=$session:team.0" -p '#{pane_id}')
+  tmux set-option -p -t "$claude_pane" @name claude
+
+  printf -v codex_cmd 'AGENT_TEAM_CODEX_BIN=%q %q %q %q %q' "$codex_bin" "$ROLE_LAUNCHER" codex "$project" "$task_file"
+  codex_pane=$(tmux split-window -h -P -F '#{pane_id}' -t "$claude_pane" -c "$project" "$codex_cmd")
+  tmux set-option -p -t "$codex_pane" @name codex
+  tmux set-environment -t "=$session" AGENT_TEAM_PROJECT "$project"
+  tmux set-environment -t "=$session" AGENT_TEAM_ROOT "$ROOT"
+  tmux set-option -t "=$session" mouse on
+  tmux set-option -t "=$session" pane-border-status top
+  tmux set-option -t "=$session" pane-border-format ' #{@name} | #{b:pane_current_path} '
+  tmux select-layout -t "=$session:team" tiled >/dev/null
+  tmux select-pane -t "$codex_pane"
+
+  echo "Started '$session': Codex Lead + Claude Worker"
+  if $detach; then
+    echo "Attach with: agent-team attach --session $session"
+  else
+    attach_session "$session"
+  fi
+}
+
+cmd_task() {
+  parse_session_only "$@"
+  [[ ${#REMAINING[@]} -gt 0 ]] || die "task text is required"
+  session_exists "$SESSION" || die "session not found: $SESSION"
+  local target message
+  target=$(pane_for_label "$SESSION" codex)
+  [[ -n "$target" ]] || die "Codex pane not found in session: $SESSION"
+  message="USER_TASK $(printf '%s ' "${REMAINING[@]}")"
+  if [[ -n "${AGENT_TEAM_TMUX_SOCKET:-}" ]]; then
+    export TMUX_BRIDGE_SOCKET
+    TMUX_BRIDGE_SOCKET=$(tmux display-message -t "$target" -p '#{socket_path}')
+  fi
+  "$BRIDGE" read "$target" 20 >/dev/null
+  "$BRIDGE" type "$target" "$message"
+  "$BRIDGE" read "$target" 20 >/dev/null
+  "$BRIDGE" keys "$target" Enter
+  echo "Task sent to Codex Lead in '$SESSION'."
+}
+
+cmd_add_mimo() {
+  parse_session_only "$@"
+  session_exists "$SESSION" || die "session not found: $SESSION"
+  local mimo_bin
+  mimo_bin=$(command -v "${AGENT_TEAM_MIMO_BIN:-mimo}") || die "missing MiMo CLI"
+  if [[ -n "$(pane_for_label "$SESSION" mimo)" ]]; then
+    die "MiMo pane already exists in session: $SESSION"
+  fi
+  local project task_file mimo_cmd pane
+  project=$(tmux show-environment -t "=$SESSION" AGENT_TEAM_PROJECT | sed 's/^[^=]*=//')
+  task_file="${TMPDIR:-/tmp}/agent-team/$SESSION/task.md"
+  printf -v mimo_cmd 'AGENT_TEAM_MIMO_BIN=%q %q %q %q %q' "$mimo_bin" "$ROLE_LAUNCHER" mimo "$project" "$task_file"
+  pane=$(tmux split-window -v -P -F '#{pane_id}' -t "=$SESSION:team" -c "$project" "$mimo_cmd")
+  tmux set-option -p -t "$pane" @name mimo
+  tmux select-layout -t "=$SESSION:team" tiled >/dev/null
+  echo "Added MiMo Reviewer to '$SESSION'. Codex can now delegate reviews to label 'mimo'."
+}
+
+cmd_attach() {
+  parse_session_only "$@"
+  session_exists "$SESSION" || die "session not found: $SESSION"
+  attach_session "$SESSION"
+}
+
+cmd_status() {
+  parse_session_only "$@"
+  session_exists "$SESSION" || die "session not found: $SESSION"
+  tmux list-panes -t "=$SESSION" -F '#{pane_id}  #{@name}  #{pane_current_command}  #{pane_current_path}'
+}
+
+cmd_stop() {
+  parse_session_only "$@"
+  session_exists "$SESSION" || die "session not found: $SESSION"
+  tmux kill-session -t "=$SESSION"
+  echo "Stopped '$SESSION'."
+}
+
+[[ $# -gt 0 ]] || { usage; exit 0; }
+case "$1" in
+  start) shift; cmd_start "$@" ;;
+  task) shift; cmd_task "$@" ;;
+  add-mimo) shift; cmd_add_mimo "$@" ;;
+  attach) shift; cmd_attach "$@" ;;
+  status) shift; cmd_status "$@" ;;
+  stop) shift; cmd_stop "$@" ;;
+  help|-h|--help) usage ;;
+  *) die "unknown command: $1 (run 'agent-team help')" ;;
+esac

@@ -1,0 +1,1671 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Agent Team Desktop Prototype</title>
+    <style>
+      :root {
+        --canvas: #f7f8fa;
+        --surface: #ffffff;
+        --surface-soft: #f1f3f5;
+        --surface-raised: #fbfbfc;
+        --rail: #f3f4f6;
+        --ink: #1f2328;
+        --ink-soft: #4b5563;
+        --muted: #737b86;
+        --muted-2: #969da8;
+        --line: #dde1e7;
+        --line-soft: #ebedf0;
+        --primary: #4f63d7;
+        --primary-soft: #eef1ff;
+        --success: #237a4b;
+        --success-soft: #eaf7ef;
+        --warning: #9a640d;
+        --warning-soft: #fff5df;
+        --danger: #bb3b3b;
+        --terminal: #101216;
+        --terminal-2: #171b21;
+        --terminal-line: #2a3039;
+        --terminal-text: #e8edf5;
+        --terminal-muted: #8b96a8;
+        --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.05);
+        --shadow-md: 0 10px 26px rgba(16, 24, 40, 0.08);
+        --radius: 8px;
+        color: var(--ink);
+        background: var(--canvas);
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+          sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        min-height: 100%;
+      }
+
+      body {
+        margin: 0;
+        overflow: hidden;
+      }
+
+      button,
+      input,
+      select {
+        font: inherit;
+      }
+
+      button {
+        cursor: default;
+      }
+
+      .icon {
+        width: 18px;
+        height: 18px;
+        flex: 0 0 auto;
+        stroke: currentColor;
+        stroke-width: 1.8;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        fill: none;
+      }
+
+      .app {
+        display: grid;
+        grid-template-columns: 286px minmax(0, 1fr);
+        min-height: 100vh;
+        background: var(--canvas);
+      }
+
+      .rail {
+        display: grid;
+        grid-template-rows: auto 1fr auto;
+        min-width: 0;
+        border-right: 1px solid var(--line);
+        background: var(--rail);
+      }
+
+      .window-chrome {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 14px 14px 8px;
+      }
+
+      .traffic {
+        display: flex;
+        gap: 8px;
+      }
+
+      .dot {
+        width: 12px;
+        height: 12px;
+        border-radius: 999px;
+      }
+
+      .dot.red {
+        background: #ff5f57;
+      }
+
+      .dot.yellow {
+        background: #ffbd2e;
+      }
+
+      .dot.green {
+        background: #28c840;
+      }
+
+      .app-mark {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 650;
+      }
+
+      .rail-actions {
+        display: grid;
+        gap: 4px;
+        padding: 8px 10px 16px;
+      }
+
+      .rail-action {
+        display: grid;
+        grid-template-columns: 24px minmax(0, 1fr);
+        align-items: center;
+        min-height: 42px;
+        border: 0;
+        border-radius: var(--radius);
+        background: transparent;
+        color: var(--ink-soft);
+        padding: 0 10px;
+        text-align: left;
+      }
+
+      .rail-action:hover,
+      .rail-action:focus-visible {
+        background: rgba(255, 255, 255, 0.78);
+        color: var(--ink);
+        outline: none;
+      }
+
+      .rail-action.primary-action {
+        color: var(--ink);
+        font-weight: 650;
+      }
+
+      .project-zone {
+        min-width: 0;
+        overflow: auto;
+        padding: 0 10px 14px;
+      }
+
+      .rail-section-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin: 6px 2px 8px;
+        color: var(--muted-2);
+        font-size: 12px;
+        font-weight: 700;
+      }
+
+      .projects-list {
+        display: grid;
+        gap: 8px;
+      }
+
+      .project-card {
+        position: relative;
+        overflow: hidden;
+        border: 1px solid transparent;
+        border-radius: 12px;
+      }
+
+      .project-card.active {
+        border-color: rgba(79, 99, 215, 0.18);
+        background: rgba(255, 255, 255, 0.48);
+      }
+
+      .project-row {
+        display: grid;
+        grid-template-columns: 24px minmax(0, 1fr);
+        gap: 8px;
+        align-items: center;
+        width: 100%;
+        min-height: 44px;
+        border: 0;
+        border-radius: 10px;
+        background: transparent;
+        color: var(--ink);
+        padding: 0 82px 0 8px;
+        text-align: left;
+      }
+
+      .project-card.active .project-row,
+      .project-row:hover {
+        background: rgba(255, 255, 255, 0.82);
+      }
+
+      .project-name {
+        overflow: hidden;
+        font-size: 15px;
+        font-weight: 650;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .icon-button {
+        display: grid;
+        place-items: center;
+        width: 34px;
+        height: 34px;
+        border: 0;
+        border-radius: 8px;
+        background: transparent;
+        color: var(--muted);
+      }
+
+      .icon-button:hover,
+      .icon-button:focus-visible {
+        background: var(--surface-soft);
+        color: var(--ink);
+        outline: none;
+      }
+
+      .project-menu-trigger {
+        position: absolute;
+        top: 5px;
+        right: 42px;
+      }
+
+      .project-chat-trigger {
+        position: absolute;
+        top: 5px;
+        right: 6px;
+      }
+
+      .chat-list {
+        display: grid;
+        gap: 2px;
+        padding: 0 0 6px 32px;
+      }
+
+      .chat-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: center;
+        min-height: 38px;
+        border: 0;
+        border-radius: 9px;
+        background: transparent;
+        color: var(--ink-soft);
+        padding: 0 8px;
+        text-align: left;
+      }
+
+      .chat-row:hover,
+      .chat-row.active {
+        background: rgba(255, 255, 255, 0.88);
+        color: var(--ink);
+      }
+
+      .chat-row strong {
+        overflow: hidden;
+        font-size: 13px;
+        font-weight: 620;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .chat-row time {
+        color: var(--muted-2);
+        font-size: 12px;
+        white-space: nowrap;
+      }
+
+      .project-menu {
+        position: absolute;
+        top: 38px;
+        right: 8px;
+        z-index: 10;
+        display: grid;
+        min-width: 142px;
+        overflow: hidden;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: var(--surface);
+        box-shadow: var(--shadow-md);
+      }
+
+      .project-menu button {
+        min-height: 36px;
+        border: 0;
+        background: transparent;
+        color: var(--ink-soft);
+        padding: 0 12px;
+        text-align: left;
+      }
+
+      .project-menu button:hover {
+        background: var(--surface-soft);
+        color: var(--ink);
+      }
+
+      .rail-foot {
+        padding: 10px;
+        border-top: 1px solid rgba(221, 225, 231, 0.72);
+      }
+
+      .toast {
+        min-height: 34px;
+        border: 1px solid var(--line-soft);
+        border-radius: 10px;
+        background: rgba(255, 255, 255, 0.72);
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.35;
+        padding: 8px 10px;
+      }
+
+      .main {
+        display: grid;
+        grid-template-rows: auto minmax(0, 1fr);
+        min-width: 0;
+        background: var(--canvas);
+      }
+
+      .session-bar {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 12px;
+        align-items: center;
+        min-height: 42px;
+        border-bottom: 1px solid var(--line);
+        background: rgba(255, 255, 255, 0.78);
+        padding: 5px 12px 5px 16px;
+      }
+
+      .session-title {
+        min-width: 0;
+      }
+
+      .session-title h1 {
+        overflow: hidden;
+        margin: 0;
+        color: var(--ink);
+        font-size: 14px;
+        font-weight: 680;
+        line-height: 1.3;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .session-meta {
+        overflow: hidden;
+        color: var(--muted);
+        font-size: 11px;
+        line-height: 1.25;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .session-status {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        color: var(--muted);
+        font-size: 12px;
+        white-space: nowrap;
+      }
+
+      .status-dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 999px;
+        background: #38a169;
+        box-shadow: 0 0 0 4px rgba(56, 161, 105, 0.12);
+      }
+
+      .status-dot.warning {
+        background: var(--warning);
+        box-shadow: 0 0 0 4px rgba(154, 100, 13, 0.14);
+      }
+
+      .workspace {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 332px;
+        min-height: 0;
+      }
+
+      .canvas {
+        min-width: 0;
+        min-height: 0;
+        padding: 12px;
+      }
+
+      .terminal-grid {
+        display: grid;
+        height: 100%;
+        min-height: 0;
+        gap: 10px;
+      }
+
+      .terminal-grid.one {
+        grid-template-columns: minmax(360px, 1fr);
+      }
+
+      .terminal-grid.two {
+        grid-template-columns: repeat(2, minmax(280px, 1fr));
+      }
+
+      .terminal-grid.three {
+        grid-template-columns: minmax(320px, 1.05fr) minmax(300px, 0.95fr);
+        grid-template-rows: minmax(220px, 1fr) minmax(190px, 0.86fr);
+      }
+
+      .agent-window {
+        display: grid;
+        grid-template-rows: auto minmax(0, 1fr);
+        min-height: 220px;
+        overflow: hidden;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: var(--surface);
+        box-shadow: var(--shadow-sm);
+      }
+
+      .terminal-grid.three .agent-window.first {
+        grid-row: span 2;
+      }
+
+      .window-head {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 10px;
+        align-items: center;
+        min-height: 42px;
+        border-bottom: 1px solid var(--line-soft);
+        background: var(--surface-raised);
+        padding: 0 10px 0 12px;
+      }
+
+      .agent-title {
+        display: flex;
+        min-width: 0;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .cli-name {
+        overflow: hidden;
+        color: var(--ink);
+        font-size: 13px;
+        font-weight: 700;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .role {
+        border-radius: 999px;
+        padding: 3px 8px;
+        font-size: 11px;
+        font-weight: 720;
+        line-height: 1.25;
+        white-space: nowrap;
+      }
+
+      .role.plan {
+        background: var(--primary-soft);
+        color: #3949b7;
+      }
+
+      .role.exec {
+        background: var(--success-soft);
+        color: var(--success);
+      }
+
+      .role.review {
+        background: var(--warning-soft);
+        color: var(--warning);
+      }
+
+      .window-state {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .terminal {
+        display: grid;
+        align-content: start;
+        gap: 9px;
+        overflow: hidden;
+        border-top: 1px solid rgba(255, 255, 255, 0.04);
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.035), transparent 32px),
+          var(--terminal);
+        color: var(--terminal-text);
+        font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+        font-size: 12px;
+        line-height: 1.55;
+        padding: 13px;
+      }
+
+      .terminal-line {
+        display: block;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .terminal .muted {
+        color: var(--terminal-muted);
+      }
+
+      .terminal .warn {
+        color: #f2c46d;
+      }
+
+      .terminal .prompt {
+        color: #9dd6b5;
+      }
+
+      .terminal .accent {
+        color: #9db2ff;
+      }
+
+      .side-panel {
+        display: grid;
+        grid-template-rows: auto minmax(0, 0.92fr) minmax(0, 1fr);
+        min-width: 0;
+        border-left: 1px solid var(--line);
+        background: #f9fafb;
+      }
+
+      .panel-section {
+        min-width: 0;
+        padding: 12px;
+      }
+
+      .panel-section + .panel-section {
+        border-top: 1px solid var(--line);
+      }
+
+      .config-panel {
+        display: grid;
+        gap: 10px;
+      }
+
+      .config-panel.collapsed {
+        padding: 10px 12px;
+      }
+
+      .config-panel.collapsed .config-body {
+        display: none;
+      }
+
+      .config-toggle {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr) auto;
+        gap: 8px;
+        align-items: center;
+        width: 100%;
+        min-height: 40px;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: var(--surface);
+        color: var(--ink);
+        padding: 0 10px;
+        text-align: left;
+      }
+
+      .config-toggle:hover,
+      .config-toggle:focus-visible {
+        border-color: #cfd5df;
+        background: var(--surface-raised);
+        outline: none;
+      }
+
+      .config-summary {
+        overflow: hidden;
+        color: var(--muted);
+        font-size: 12px;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .config-body {
+        display: grid;
+        gap: 10px;
+      }
+
+      .panel-title {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin: 0 0 8px;
+        color: var(--ink);
+        font-size: 12px;
+        font-weight: 760;
+      }
+
+      .detected {
+        margin: 0;
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.45;
+      }
+
+      .segmented {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 4px;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: var(--surface-soft);
+        padding: 4px;
+      }
+
+      .segmented button {
+        min-height: 34px;
+        border: 0;
+        border-radius: 7px;
+        background: transparent;
+        color: var(--muted);
+        font-weight: 650;
+      }
+
+      .segmented button.active {
+        background: var(--surface);
+        color: var(--primary);
+        box-shadow: var(--shadow-sm);
+      }
+
+      .field-list {
+        display: grid;
+        gap: 8px;
+      }
+
+      .field {
+        display: grid;
+        gap: 5px;
+      }
+
+      .field label {
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 620;
+      }
+
+      .field select {
+        width: 100%;
+        min-height: 38px;
+        border: 1px solid var(--line);
+        border-radius: 9px;
+        background: var(--surface);
+        color: var(--ink);
+        padding: 0 10px;
+      }
+
+      .field select:focus-visible {
+        border-color: var(--primary);
+        outline: 3px solid rgba(79, 99, 215, 0.14);
+      }
+
+      .field-hint {
+        overflow: hidden;
+        color: var(--muted);
+        font-size: 11px;
+        line-height: 1.35;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .field-hint.missing {
+        color: var(--warning);
+      }
+
+      .primary {
+        display: grid;
+        place-items: center;
+        min-height: 38px;
+        width: 100%;
+        border: 1px solid var(--primary);
+        border-radius: 9px;
+        background: var(--primary);
+        color: #ffffff;
+        font-weight: 680;
+      }
+
+      .primary:hover,
+      .primary:focus-visible {
+        background: #4355bd;
+        outline: none;
+      }
+
+      .todo,
+      .inbox {
+        display: grid;
+        align-content: start;
+        gap: 8px;
+        overflow: auto;
+      }
+
+      .panel-title .icon-button {
+        width: 30px;
+        height: 30px;
+      }
+
+      .sync-pill {
+        border: 1px solid var(--line-soft);
+        border-radius: 999px;
+        background: var(--surface);
+        color: var(--muted);
+        padding: 3px 8px;
+        font-size: 11px;
+        font-weight: 680;
+        line-height: 1.2;
+      }
+
+      .todo-feed {
+        display: grid;
+        gap: 8px;
+      }
+
+      #bridge-inbox-feed {
+        display: grid;
+        gap: 8px;
+      }
+
+      .todo-item {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr);
+        gap: 8px;
+        align-items: start;
+        min-height: 46px;
+        border: 1px solid var(--line-soft);
+        border-left: 3px solid #9aa7c7;
+        border-radius: 10px;
+        background: var(--surface);
+        padding: 9px 10px 9px 8px;
+      }
+
+      .todo-item.done {
+        border-left-color: #49a270;
+      }
+
+      .todo-item.active {
+        border-left-color: var(--primary);
+      }
+
+      .todo-item.waiting {
+        border-left-color: #d39b30;
+      }
+
+      .todo-marker {
+        display: grid;
+        place-items: center;
+        min-width: 46px;
+        height: 22px;
+        border: 1px solid var(--line-soft);
+        border-radius: 999px;
+        color: var(--muted);
+        font-size: 11px;
+        font-weight: 720;
+      }
+
+      .todo-item.done .todo-marker {
+        border-color: rgba(73, 162, 112, 0.25);
+        background: var(--success-soft);
+        color: var(--success);
+      }
+
+      .todo-item.active .todo-marker {
+        border-color: rgba(79, 99, 215, 0.24);
+        background: var(--primary-soft);
+        color: var(--primary);
+      }
+
+      .todo-item.waiting .todo-marker {
+        border-color: rgba(211, 155, 48, 0.24);
+        background: var(--warning-soft);
+        color: var(--warning);
+      }
+
+      .todo-text strong,
+      .message strong {
+        display: block;
+        overflow: hidden;
+        color: var(--ink);
+        font-size: 12px;
+        font-weight: 690;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .todo-text span,
+      .message span {
+        display: block;
+        overflow: hidden;
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.45;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .message {
+        border: 1px solid var(--line-soft);
+        border-left: 3px solid #9aa7c7;
+        border-radius: 10px;
+        background: var(--surface);
+        padding: 9px 10px;
+      }
+
+      .message.ok {
+        border-left-color: #49a270;
+      }
+
+      .message.waiting {
+        border-left-color: #d39b30;
+      }
+
+      @media (max-width: 1120px) {
+        .app {
+          grid-template-columns: 258px minmax(0, 1fr);
+        }
+
+        .workspace {
+          grid-template-columns: minmax(0, 1fr) 300px;
+        }
+      }
+
+      @media (max-width: 920px) {
+        body {
+          overflow: auto;
+        }
+
+        .app,
+        .workspace {
+          grid-template-columns: 1fr;
+        }
+
+        .rail {
+          min-height: auto;
+        }
+
+        .project-zone {
+          max-height: 360px;
+        }
+
+        .canvas {
+          min-height: 620px;
+        }
+
+        .side-panel {
+          grid-template-rows: auto auto auto;
+          border-left: 0;
+          border-top: 1px solid var(--line);
+        }
+
+        .terminal-grid.two,
+        .terminal-grid.three {
+          grid-template-columns: 1fr;
+          grid-template-rows: none;
+        }
+
+        .terminal-grid.three .agent-window.first {
+          grid-row: auto;
+        }
+      }
+
+      @media (prefers-reduced-motion: no-preference) {
+        .rail-action,
+        .icon-button,
+        .config-toggle,
+        .primary,
+        .chat-row,
+        .segmented button {
+          transition:
+            background-color 160ms ease,
+            border-color 160ms ease,
+            color 160ms ease,
+            box-shadow 160ms ease;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <svg width="0" height="0" style="position: absolute" aria-hidden="true" focusable="false">
+      <symbol id="icon-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" /></symbol>
+      <symbol id="icon-search" viewBox="0 0 24 24"><path d="m21 21-4.3-4.3" /><circle cx="11" cy="11" r="7" /></symbol>
+      <symbol id="icon-settings" viewBox="0 0 24 24"><path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Z" /><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.04.04a2 2 0 0 1-2.83 2.83l-.04-.04a1.7 1.7 0 0 0-1.88-.34 1.7 1.7 0 0 0-1.03 1.56V21a2 2 0 0 1-4 0v-.07a1.7 1.7 0 0 0-1.03-1.56 1.7 1.7 0 0 0-1.88.34l-.04.04a2 2 0 0 1-2.83-2.83l.04-.04A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.56-1.03H3a2 2 0 0 1 0-4h.07A1.7 1.7 0 0 0 4.6 8a1.7 1.7 0 0 0-.34-1.88l-.04-.04a2 2 0 0 1 2.83-2.83l.04.04A1.7 1.7 0 0 0 9 3.6 1.7 1.7 0 0 0 10.03 2H10a2 2 0 0 1 4 0v.07a1.7 1.7 0 0 0 1.03 1.56 1.7 1.7 0 0 0 1.88-.34l.04-.04a2 2 0 0 1 2.83 2.83l-.04.04A1.7 1.7 0 0 0 19.4 8a1.7 1.7 0 0 0 1.56 1.03H21a2 2 0 0 1 0 4h-.07A1.7 1.7 0 0 0 19.4 15Z" /></symbol>
+      <symbol id="icon-folder" viewBox="0 0 24 24"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H10l2 2h6.5A2.5 2.5 0 0 1 21 9.5v7A2.5 2.5 0 0 1 18.5 19h-13A2.5 2.5 0 0 1 3 16.5v-9Z" /></symbol>
+      <symbol id="icon-edit" viewBox="0 0 24 24"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4 11.5-11.5Z" /></symbol>
+      <symbol id="icon-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1" /><circle cx="12" cy="12" r="1" /><circle cx="19" cy="12" r="1" /></symbol>
+      <symbol id="icon-chevron" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6" /></symbol>
+      <symbol id="icon-terminal" viewBox="0 0 24 24"><path d="m7 8 4 4-4 4" /><path d="M13 17h4" /><rect x="3" y="4" width="18" height="16" rx="2" /></symbol>
+      <symbol id="icon-panel" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2" /><path d="M15 4v16" /></symbol>
+      <symbol id="icon-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6" /></symbol>
+      <symbol id="icon-inbox" viewBox="0 0 24 24"><path d="M4 13h4l2 3h4l2-3h4" /><path d="M5 20h14a2 2 0 0 0 2-2v-6L17 4H7l-4 8v6a2 2 0 0 0 2 2Z" /></symbol>
+      <symbol id="icon-bridge" viewBox="0 0 24 24"><path d="M7 7h10M7 17h10" /><path d="M9 7a3 3 0 1 1-3-3M15 17a3 3 0 1 0 3 3" /></symbol>
+    </svg>
+
+    <main class="app">
+      <aside class="rail" aria-label="项目与对话">
+        <div>
+          <div class="window-chrome">
+            <div class="traffic" aria-hidden="true">
+              <span class="dot red"></span>
+              <span class="dot yellow"></span>
+              <span class="dot green"></span>
+            </div>
+            <div class="app-mark">
+              <svg class="icon" aria-hidden="true"><use href="#icon-bridge"></use></svg>
+              <span>Bridge</span>
+            </div>
+          </div>
+
+          <nav class="rail-actions">
+            <button class="rail-action primary-action" id="new-chat" type="button">
+              <svg class="icon" aria-hidden="true"><use href="#icon-edit"></use></svg>
+              <span>新对话</span>
+            </button>
+            <button class="rail-action" data-toast="搜索面板已打开" type="button">
+              <svg class="icon" aria-hidden="true"><use href="#icon-search"></use></svg>
+              <span>搜索</span>
+            </button>
+            <button class="rail-action" data-toast="CLI 管理已打开" type="button">
+              <svg class="icon" aria-hidden="true"><use href="#icon-terminal"></use></svg>
+              <span>CLI 管理</span>
+            </button>
+            <button class="rail-action" id="add-project" type="button">
+              <svg class="icon" aria-hidden="true"><use href="#icon-plus"></use></svg>
+              <span>添加项目</span>
+            </button>
+          </nav>
+        </div>
+
+        <div class="project-zone">
+          <div class="rail-section-head">
+            <span>项目</span>
+          </div>
+          <div class="projects-list" id="projects-list"></div>
+        </div>
+
+        <div class="rail-foot">
+          <button class="rail-action" data-toast="设置已打开" type="button">
+            <svg class="icon" aria-hidden="true"><use href="#icon-settings"></use></svg>
+            <span>设置</span>
+          </button>
+          <div class="toast" id="toast" role="status" aria-live="polite">smux-bridge 就绪</div>
+        </div>
+      </aside>
+
+      <section class="main">
+        <header class="session-bar">
+          <div class="session-title">
+            <h1 id="session-title">Desktop Bridge 最小闭环</h1>
+            <div class="session-meta" id="session-meta">agent-team-desktop · main · clean · 当前对话</div>
+          </div>
+          <div class="session-status">
+            <span class="status-dot" aria-hidden="true"></span>
+            <span id="bridge-status">bridge online</span>
+          </div>
+        </header>
+
+        <section class="workspace">
+          <section class="canvas" aria-label="Agent 窗口">
+            <section class="terminal-grid three" id="terminal-grid"></section>
+          </section>
+
+          <aside class="side-panel" aria-label="团队与消息">
+            <section class="panel-section config-panel" id="team-config">
+              <button class="config-toggle" id="config-toggle" type="button" aria-expanded="true">
+                <svg class="icon" aria-hidden="true"><use href="#icon-panel"></use></svg>
+                <span class="config-summary" id="config-summary">3 人团队 · codex / claudecode / mimocode</span>
+                <svg class="icon" aria-hidden="true"><use href="#icon-chevron"></use></svg>
+              </button>
+
+              <div class="config-body">
+                <p class="detected" id="cli-detected-summary">CLI 检测：3 可用 · 2 未配置</p>
+                <div class="segmented" aria-label="Agent 团队数量">
+                  <button class="team-size active" data-size="3" type="button">3</button>
+                  <button class="team-size" data-size="2" type="button">2</button>
+                  <button class="team-size" data-size="1" type="button">1</button>
+                </div>
+                <div class="field-list" id="role-fields"></div>
+                <button class="primary" id="create-team" type="button">创建窗口</button>
+              </div>
+            </section>
+
+            <section class="panel-section todo">
+              <div class="panel-title">
+                <span>Todo List</span>
+                <span class="sync-pill">auto</span>
+              </div>
+              <div class="todo-feed" id="todo-feed" role="list"></div>
+            </section>
+
+            <section class="panel-section inbox">
+              <div class="panel-title">
+                <span>Bridge 收件箱</span>
+                <svg class="icon" aria-hidden="true"><use href="#icon-inbox"></use></svg>
+              </div>
+              <div id="bridge-inbox-feed"></div>
+            </section>
+          </aside>
+        </section>
+      </section>
+    </main>
+
+    <script>
+      const cliOptions = ["codex", "claudecode", "opencode", "mimocode", "zcode"];
+      const cliDetections = {
+        codex: { label: "Codex", status: "available", source: "PATH", version: "detected" },
+        claudecode: { label: "Claude Code", status: "available", source: "PATH", version: "detected" },
+        opencode: { label: "OpenCode", status: "available", source: "PATH", version: "detected" },
+        mimocode: { label: "MiMo Code", status: "missing", source: "missing", reason: "需要配置路径" },
+        zcode: { label: "Zcode", status: "missing", source: "missing", reason: "需要配置路径" }
+      };
+      const rawBridgeEventFixtures = [
+        {
+          version: 1,
+          eventId: "evt_task_assigned_ui",
+          sessionId: "ses_ui_flow",
+          createdAt: "2026-06-21T00:00:00.000Z",
+          type: "task.assigned",
+          fromAgentId: "planner",
+          toAgentId: "executor",
+          taskId: "task_ui_flow",
+          payload: {
+            objective: "实现 Agent Team Desktop 最小 UI 闭环",
+            scope: { paths: ["apps/desktop/**"], notes: "renderer mock flow" },
+            acceptance: [{ id: "acc_ui", text: "Todo and inbox derive from bridge events", required: true }],
+            assigneeAgentId: "executor",
+            assigneeRole: "executor"
+          }
+        },
+        {
+          version: 1,
+          eventId: "evt_task_completed_ui",
+          sessionId: "ses_ui_flow",
+          createdAt: "2026-06-21T00:01:00.000Z",
+          type: "task.completed",
+          fromAgentId: "executor",
+          toAgentId: "planner",
+          taskId: "task_ui_flow",
+          payload: {
+            taskId: "task_ui_flow",
+            changed: ["apps/desktop/prototype/index.html"],
+            tests: [{ command: "node scripts/smoke-test.mjs", cwd: ".", exitCode: 0 }],
+            risks: [],
+            summary: "完成代码修改并记录测试"
+          }
+        },
+        {
+          version: 1,
+          eventId: "evt_evidence_test_recorded_ui",
+          sessionId: "ses_ui_flow",
+          createdAt: "2026-06-21T00:02:00.000Z",
+          type: "evidence.test_recorded",
+          fromAgentId: "executor",
+          toAgentId: "planner",
+          taskId: "task_ui_flow",
+          payload: {
+            taskId: "task_ui_flow",
+            command: "node scripts/smoke-test.mjs",
+            cwd: ".",
+            exitCode: 0,
+            note: "renderer fixture test evidence"
+          }
+        },
+        {
+          version: 1,
+          eventId: "evt_review_requested_ui",
+          sessionId: "ses_ui_flow",
+          createdAt: "2026-06-21T00:03:00.000Z",
+          type: "review.requested",
+          fromAgentId: "planner",
+          toAgentId: "reviewer",
+          taskId: "task_ui_flow",
+          payload: {
+            taskId: "task_ui_flow",
+            reviewerAgentId: "reviewer",
+            focus: ["prototype", "bridge events"]
+          }
+        },
+        {
+          version: 1,
+          eventId: "evt_review_reported_ui",
+          sessionId: "ses_ui_flow",
+          createdAt: "2026-06-21T00:04:00.000Z",
+          type: "review.reported",
+          fromAgentId: "reviewer",
+          toAgentId: "planner",
+          taskId: "task_ui_flow",
+          payload: {
+            taskId: "task_ui_flow",
+            findings: [],
+            testGaps: [],
+            recommendation: "approve"
+          }
+        },
+        {
+          version: 1,
+          eventId: "evt_approval_granted_ui",
+          sessionId: "ses_ui_flow",
+          createdAt: "2026-06-21T00:05:00.000Z",
+          type: "approval.granted",
+          fromAgentId: "planner",
+          toAgentId: "executor",
+          taskId: "task_ui_flow",
+          payload: {
+            taskId: "task_ui_flow",
+            diffViewed: true,
+            evidenceIds: ["evt_task_completed_ui", "evt_evidence_test_recorded_ui"],
+            note: "planner 已批准任务"
+          }
+        }
+      ];
+      const bridgeAckFixtures = [
+        { agentId: "executor", eventId: "evt_task_assigned_ui", ackedAt: "2026-06-21T00:00:05.000Z" },
+        { agentId: "planner", eventId: "evt_task_completed_ui", ackedAt: "2026-06-21T00:01:05.000Z" },
+        { agentId: "planner", eventId: "evt_evidence_test_recorded_ui", ackedAt: "2026-06-21T00:02:05.000Z" }
+      ];
+      const roleSets = {
+        1: [{ key: "executor", label: "执行", roleClass: "exec", defaultCli: "claudecode" }],
+        2: [
+          { key: "plannerReviewer", label: "规划、审查", roleClass: "plan", defaultCli: "codex" },
+          { key: "executor", label: "执行", roleClass: "exec", defaultCli: "claudecode" }
+        ],
+        3: [
+          { key: "planner", label: "规划", roleClass: "plan", defaultCli: "codex" },
+          { key: "executor", label: "执行", roleClass: "exec", defaultCli: "claudecode" },
+          { key: "reviewer", label: "审查", roleClass: "review", defaultCli: "mimocode" }
+        ]
+      };
+
+      const state = {
+        selectedSize: 3,
+        configCollapsed: false,
+        projectCount: 1,
+        chatCount: 1,
+        menuOpenId: null,
+        activeProjectId: "p1",
+        activeChatId: "c1",
+        assignments: {
+          planner: "codex",
+          plannerReviewer: "codex",
+          executor: "claudecode",
+          reviewer: "mimocode"
+        },
+        projects: [
+          {
+            id: "p1",
+            name: "agent-team-desktop",
+            branch: "main",
+            status: "clean",
+            chats: [{ id: "c1", title: "Desktop Bridge 最小闭环", time: "18 分", teamCreated: true }]
+          }
+        ]
+      };
+
+      const projectsList = document.getElementById("projects-list");
+      const roleFields = document.getElementById("role-fields");
+      const terminalGrid = document.getElementById("terminal-grid");
+      const createButton = document.getElementById("create-team");
+      const configPanel = document.getElementById("team-config");
+      const configToggle = document.getElementById("config-toggle");
+      const configSummary = document.getElementById("config-summary");
+      const sessionTitle = document.getElementById("session-title");
+      const sessionMeta = document.getElementById("session-meta");
+      const todoFeed = document.getElementById("todo-feed");
+      const bridgeInboxFeed = document.getElementById("bridge-inbox-feed");
+      const toast = document.getElementById("toast");
+      const sizeButtons = [...document.querySelectorAll(".team-size")];
+
+      function svgIcon(name) {
+        return `<svg class="icon" aria-hidden="true"><use href="#icon-${name}"></use></svg>`;
+      }
+
+      function activeProject() {
+        return state.projects.find((project) => project.id === state.activeProjectId);
+      }
+
+      function activeChat() {
+        const project = activeProject();
+        return project ? project.chats.find((chat) => chat.id === state.activeChatId) : null;
+      }
+
+      function announce(message) {
+        toast.textContent = message;
+      }
+
+      function renderProjects() {
+        projectsList.innerHTML = "";
+        for (const project of state.projects) {
+          const card = document.createElement("section");
+          card.className = `project-card ${project.id === state.activeProjectId ? "active" : ""}`;
+          const chats = project.chats
+            .map(
+              (chat) => `
+                <button class="chat-row ${chat.id === state.activeChatId ? "active" : ""}" type="button" data-action="select-chat" data-project-id="${project.id}" data-chat-id="${chat.id}">
+                  <strong>${chat.title}</strong>
+                  <time>${chat.time}</time>
+                </button>
+              `
+            )
+            .join("");
+          const menu =
+            state.menuOpenId === project.id
+              ? `
+                <div class="project-menu">
+                  <button type="button" data-action="rename-project" data-project-id="${project.id}">重命名项目</button>
+                  <button type="button" data-action="copy-project" data-project-id="${project.id}">复制路径</button>
+                  <button type="button" data-action="remove-project" data-project-id="${project.id}">移除项目</button>
+                </div>
+              `
+              : "";
+          card.innerHTML = `
+            <button class="project-row" type="button" data-action="select-project" data-project-id="${project.id}">
+              ${svgIcon("folder")}
+              <span class="project-name">${project.name}</span>
+            </button>
+            <button class="icon-button project-menu-trigger" type="button" data-action="toggle-project-menu" data-project-id="${project.id}" aria-label="项目菜单">${svgIcon("more")}</button>
+            <button class="icon-button project-chat-trigger" type="button" data-action="add-chat" data-project-id="${project.id}" aria-label="新增对话">${svgIcon("edit")}</button>
+            <div class="chat-list">${chats}</div>
+            ${menu}
+          `;
+          projectsList.appendChild(card);
+        }
+        renderSession();
+        renderTodos();
+        renderInbox();
+      }
+
+      function renderSession() {
+        const project = activeProject();
+        const chat = activeChat();
+        if (!project || !chat) return;
+        sessionTitle.textContent = chat.title;
+        sessionMeta.textContent = `${project.name} · ${project.branch} · ${project.status} · 当前对话`;
+      }
+
+      function setConfigCollapsed(collapsed) {
+        state.configCollapsed = collapsed;
+        configPanel.classList.toggle("collapsed", collapsed);
+        configToggle.setAttribute("aria-expanded", String(!collapsed));
+      }
+
+      function currentRoles() {
+        return roleSets[state.selectedSize];
+      }
+
+      function cliOptionLabel(cli) {
+        const detection = cliDetections[cli];
+        return detection.status === "available" ? `${detection.label} · 已识别` : `${detection.label} · 未配置`;
+      }
+
+      function cliFieldDetail(cli) {
+        const detection = cliDetections[cli];
+        return detection.status === "available"
+          ? `${detection.source} · ${detection.version || "version pending"}`
+          : detection.reason || "未检测到可执行文件";
+      }
+
+      function cliStatusLabel(cli) {
+        return cliDetections[cli].status === "available" ? "ready" : "needs path";
+      }
+
+      function cliTerminalLine(cli) {
+        const detection = cliDetections[cli];
+        return detection.status === "available"
+          ? `${detection.label} detected from ${detection.source}`
+          : `${detection.label} executable not configured`;
+      }
+
+      function ackKey(agentId, eventId) {
+        return `${agentId}:${eventId}`;
+      }
+
+      function toBridgeUiEvents(events, acks) {
+        const indexedAcks = new Set(acks.map((ack) => ackKey(ack.agentId, ack.eventId)));
+        return events.map((event) => {
+          const payload = event.payload && typeof event.payload === "object" ? event.payload : {};
+          const status = event.toAgentId && indexedAcks.has(ackKey(event.toAgentId, event.eventId))
+            ? "acked"
+            : event.toAgentId
+              ? "queued"
+              : "waiting";
+          let summary = event.type;
+          if (event.type === "task.assigned") {
+            summary = payload.objective ? `派发任务：${payload.objective}` : "任务已派发给 executor";
+          } else if (event.type === "task.completed") {
+            summary = payload.summary || "executor 已提交完成报告";
+          } else if (event.type === "review.requested") {
+            summary = Array.isArray(payload.focus) && payload.focus.length > 0
+              ? `请求审查：${payload.focus.join(", ")}`
+              : "已请求 reviewer 审查";
+          } else if (event.type === "review.reported") {
+            summary = payload.recommendation ? `审查建议：${payload.recommendation}` : "reviewer 已提交审查结果";
+          } else if (event.type === "approval.granted") {
+            summary = payload.note || "planner 已批准任务";
+          } else if (event.type === "evidence.diff_captured") {
+            summary = payload.summary || "Diff 证据已记录";
+          } else if (event.type === "evidence.test_recorded") {
+            summary = payload.command ? `测试证据：${payload.command}` : "测试证据已记录";
+          }
+          return {
+            id: event.eventId,
+            type: event.type,
+            from: event.fromAgentId,
+            to: event.toAgentId || null,
+            taskId: event.taskId || null,
+            status,
+            summary,
+            time: event.createdAt || ""
+          };
+        });
+      }
+
+      function bridgeEvents() {
+        return activeChat()?.teamCreated ? toBridgeUiEvents(rawBridgeEventFixtures, bridgeAckFixtures) : [];
+      }
+
+      function hasBridgeEvent(events, type) {
+        return events.some((event) => event.type === type && event.status !== "waiting");
+      }
+
+      function eventMessageClass(event) {
+        if (event.status === "acked") return "ok";
+        if (event.status === "queued") return "waiting";
+        return "";
+      }
+
+      function eventTitle(event) {
+        return event.to ? `${event.type} -> ${event.to}` : event.type;
+      }
+
+      function renderRoleFields() {
+        roleFields.innerHTML = "";
+        for (const role of currentRoles()) {
+          const field = document.createElement("div");
+          field.className = "field";
+          const selectedCli = state.assignments[role.key] || role.defaultCli;
+          const options = cliOptions
+            .map((cli) => `<option value="${cli}" ${cli === selectedCli ? "selected" : ""}>${cliOptionLabel(cli)}</option>`)
+            .join("");
+          field.innerHTML = `
+            <label for="role-${role.key}">${role.label}</label>
+            <select id="role-${role.key}" data-role-key="${role.key}">${options}</select>
+            <span class="field-hint ${cliDetections[selectedCli].status}">${cliFieldDetail(selectedCli)}</span>
+          `;
+          roleFields.appendChild(field);
+        }
+        updateConfigSummary();
+        renderTodos();
+        renderInbox();
+      }
+
+      function updateConfigSummary() {
+        const cliSummary = currentRoles()
+          .map((role) => state.assignments[role.key] || role.defaultCli)
+          .join(" / ");
+        configSummary.textContent = `${state.selectedSize} 人团队 · ${cliSummary}`;
+      }
+
+      function readAssignmentsFromFields() {
+        roleFields.querySelectorAll("select").forEach((select) => {
+          state.assignments[select.dataset.roleKey] = select.value;
+        });
+        updateConfigSummary();
+      }
+
+      function updateRoleDiagnostics() {
+        roleFields.querySelectorAll("select").forEach((select) => {
+          const hint = select.parentElement.querySelector(".field-hint");
+          if (!hint) return;
+          const detection = cliDetections[select.value];
+          hint.className = `field-hint ${detection.status}`;
+          hint.textContent = cliFieldDetail(select.value);
+        });
+      }
+
+      function terminalLines(role, cli) {
+        const envRole = role.key === "plannerReviewer" ? "planner+reviewer" : role.key;
+        return [
+          `<span class="terminal-line"><span class="muted">AGENT_TEAM_ROLE</span>=<span class="accent">${envRole}</span></span>`,
+          `<span class="terminal-line"><span class="prompt">$</span> ${cli} --workspace agent-team-desktop</span>`,
+          `<span class="terminal-line">${role.label} channel attached through smux-bridge</span>`,
+          `<span class="terminal-line ${cliDetections[cli].status === "available" ? "muted" : "warn"}">${cliTerminalLine(cli)}</span>`,
+          `<span class="terminal-line muted">inbox cursor: task.assigned -> acknowledged</span>`,
+          `<span class="terminal-line muted">waiting for next bridge event...</span>`
+        ].join("");
+      }
+
+      function renderWindows() {
+        const roles = currentRoles();
+        terminalGrid.className = `terminal-grid ${state.selectedSize === 1 ? "one" : state.selectedSize === 2 ? "two" : "three"}`;
+        terminalGrid.innerHTML = "";
+        roles.forEach((role, index) => {
+          const cli = state.assignments[role.key] || role.defaultCli;
+          const article = document.createElement("article");
+          article.className = `agent-window ${index === 0 ? "first" : ""}`;
+          article.innerHTML = `
+            <header class="window-head">
+              <div class="agent-title">
+              <span class="cli-name">${cli}</span>
+                <span class="role ${role.roleClass}">${role.label}</span>
+              </div>
+              <span class="window-state"><span class="status-dot ${cliDetections[cli].status === "available" ? "" : "warning"}" aria-hidden="true"></span>${cliStatusLabel(cli)}</span>
+            </header>
+            <div class="terminal">${terminalLines(role, cli)}</div>
+          `;
+          terminalGrid.appendChild(article);
+        });
+      }
+
+      function inferTodosFromConversation() {
+        const chat = activeChat();
+        const roles = currentRoles();
+        const hasReviewer = roles.some((role) => role.key === "reviewer" || role.key === "plannerReviewer");
+        const plannerCli = state.assignments.planner || state.assignments.plannerReviewer || "codex";
+        const executorCli = state.assignments.executor || "claudecode";
+        const reviewerCli = state.assignments.reviewer || state.assignments.plannerReviewer || "mimocode";
+        const teamCreated = Boolean(chat?.teamCreated);
+        const events = bridgeEvents();
+        const taskAssigned = hasBridgeEvent(events, "task.assigned");
+        const taskCompleted = hasBridgeEvent(events, "task.completed");
+        const reviewRequested = hasBridgeEvent(events, "review.requested");
+        const reviewReported = hasBridgeEvent(events, "review.reported");
+        const approvalGranted = hasBridgeEvent(events, "approval.granted");
+
+        const todos = [
+          {
+            state: "done",
+            label: "done",
+            title: "识别对话目标",
+            detail: chat ? `${chat.title} · 已提取工作区目标` : "等待当前对话"
+          },
+          {
+            state: teamCreated ? "done" : "active",
+            label: teamCreated ? "done" : "next",
+            title: "生成 Agent 窗口",
+            detail: teamCreated ? `${state.selectedSize} 个窗口已连接 smux-bridge` : "等待创建当前对话的 Agent 窗口"
+          },
+          {
+            state: taskAssigned ? "done" : teamCreated ? "active" : "waiting",
+            label: taskAssigned ? "done" : teamCreated ? "next" : "wait",
+            title: "派发执行任务",
+            detail: taskAssigned ? `${plannerCli} -> ${executorCli} · task.assigned 已 ACK` : `${plannerCli} 准备任务包`
+          },
+          {
+            state: taskCompleted ? "done" : taskAssigned ? "active" : "waiting",
+            label: taskCompleted ? "done" : taskAssigned ? "next" : "wait",
+            title: "回收执行结果",
+            detail: taskCompleted ? `${executorCli} 已提交 task.completed` : `${executorCli} 等待完成报告`
+          }
+        ];
+
+        if (hasReviewer) {
+          todos.push({
+            state: reviewReported ? "done" : reviewRequested || taskCompleted ? "active" : "waiting",
+            label: reviewReported ? "done" : reviewRequested || taskCompleted ? "next" : "wait",
+            title: "审查 Diff 与证据",
+            detail: reviewReported ? `${reviewerCli} 已提交 review.reported` : `${reviewerCli} 等待 review.requested`
+          });
+        } else {
+          todos.push({
+            state: taskCompleted ? "active" : "waiting",
+            label: taskCompleted ? "next" : "wait",
+            title: "回写执行结果",
+            detail: "执行完成后由 Bridge 同步消息与证据"
+          });
+        }
+
+        todos.push({
+          state: approvalGranted ? "done" : reviewReported || (!hasReviewer && taskCompleted) ? "active" : "waiting",
+          label: approvalGranted ? "done" : reviewReported || (!hasReviewer && taskCompleted) ? "next" : "wait",
+          title: "验收并批准",
+          detail: approvalGranted ? "approval.granted 已写入 Bridge" : "等待 planner 查看 diff 与证据"
+        });
+
+        return todos;
+      }
+
+      function renderTodos() {
+        todoFeed.innerHTML = inferTodosFromConversation()
+          .map(
+            (todo) => `
+              <div class="todo-item ${todo.state}" role="listitem">
+                <span class="todo-marker">${todo.label}</span>
+                <span class="todo-text">
+                  <strong>${todo.title}</strong>
+                  <span>${todo.detail}</span>
+                </span>
+              </div>
+            `
+          )
+          .join("");
+      }
+
+      function renderInbox() {
+        bridgeInboxFeed.innerHTML = bridgeEvents()
+          .map(
+            (event) => `
+              <div class="message ${eventMessageClass(event)}">
+                <strong>${eventTitle(event)}</strong>
+                <span>${event.status} · ${event.summary} · ${event.time}</span>
+              </div>
+            `
+          )
+          .join("");
+      }
+
+      function addChat(projectId, title) {
+        const project = state.projects.find((item) => item.id === projectId);
+        if (!project) return;
+        state.chatCount += 1;
+        const chat = {
+          id: `c${state.chatCount}`,
+          title: title || `新对话 ${state.chatCount}`,
+          time: "刚刚",
+          teamCreated: false
+        };
+        project.chats.unshift(chat);
+        state.activeProjectId = project.id;
+        state.activeChatId = chat.id;
+        state.menuOpenId = null;
+        renderProjects();
+        announce("新对话已创建");
+      }
+
+      function addProject() {
+        state.projectCount += 1;
+        state.chatCount += 1;
+        const project = {
+          id: `p${state.projectCount}`,
+          name: `new-project-${state.projectCount}`,
+          branch: "main",
+          status: "clean",
+          chats: [{ id: `c${state.chatCount}`, title: "新项目对话", time: "刚刚", teamCreated: false }]
+        };
+        state.projects.unshift(project);
+        state.activeProjectId = project.id;
+        state.activeChatId = project.chats[0].id;
+        state.menuOpenId = null;
+        renderProjects();
+        announce("项目已添加");
+      }
+
+      document.getElementById("add-project").addEventListener("click", addProject);
+      document.getElementById("new-chat").addEventListener("click", () => addChat(state.activeProjectId));
+
+      projectsList.addEventListener("click", (event) => {
+        const target = event.target.closest("[data-action]");
+        if (!target) return;
+        const action = target.dataset.action;
+        const projectId = target.dataset.projectId;
+        const project = state.projects.find((item) => item.id === projectId);
+        if (!project) return;
+
+        if (action === "select-project") {
+          state.activeProjectId = project.id;
+          state.activeChatId = project.chats[0]?.id;
+          state.menuOpenId = null;
+          renderProjects();
+        }
+
+        if (action === "select-chat") {
+          state.activeProjectId = project.id;
+          state.activeChatId = target.dataset.chatId;
+          state.menuOpenId = null;
+          renderProjects();
+        }
+
+        if (action === "add-chat") {
+          addChat(project.id);
+        }
+
+        if (action === "toggle-project-menu") {
+          state.menuOpenId = state.menuOpenId === project.id ? null : project.id;
+          renderProjects();
+        }
+
+        if (action === "rename-project") {
+          project.name = project.name.endsWith(" updated") ? project.name : `${project.name} updated`;
+          state.menuOpenId = null;
+          renderProjects();
+          announce("项目已重命名");
+        }
+
+        if (action === "copy-project") {
+          state.menuOpenId = null;
+          renderProjects();
+          announce("项目路径已复制到 Bridge");
+        }
+
+        if (action === "remove-project") {
+          if (state.projects.length === 1) {
+            announce("至少保留一个项目");
+            state.menuOpenId = null;
+            renderProjects();
+            return;
+          }
+          state.projects = state.projects.filter((item) => item.id !== project.id);
+          state.activeProjectId = state.projects[0].id;
+          state.activeChatId = state.projects[0].chats[0].id;
+          state.menuOpenId = null;
+          renderProjects();
+          announce("项目已移除");
+        }
+      });
+
+      document.querySelectorAll("[data-toast]").forEach((button) => {
+        button.addEventListener("click", () => announce(button.dataset.toast));
+      });
+
+      sizeButtons.forEach((button) => {
+        button.addEventListener("click", () => {
+          readAssignmentsFromFields();
+          state.selectedSize = Number(button.dataset.size);
+          sizeButtons.forEach((item) => item.classList.toggle("active", item === button));
+          renderRoleFields();
+        });
+      });
+
+      roleFields.addEventListener("change", () => {
+        readAssignmentsFromFields();
+        updateRoleDiagnostics();
+        renderTodos();
+      });
+
+      createButton.addEventListener("click", () => {
+        readAssignmentsFromFields();
+        const chat = activeChat();
+        if (chat) chat.teamCreated = true;
+        renderWindows();
+        renderTodos();
+        renderInbox();
+        setConfigCollapsed(true);
+        announce(`${state.selectedSize} 个 Agent 窗口已创建`);
+      });
+
+      configToggle.addEventListener("click", () => setConfigCollapsed(!state.configCollapsed));
+
+      renderProjects();
+      renderRoleFields();
+      renderWindows();
+      renderInbox();
+    </script>
+  </body>
+</html>
