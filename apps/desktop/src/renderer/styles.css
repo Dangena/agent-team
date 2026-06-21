@@ -36,7 +36,7 @@
 html,
 body,
 #root {
-  min-height: 100%;
+  height: 100%;
 }
 
 body {
@@ -72,14 +72,18 @@ button {
 .app {
   display: grid;
   grid-template-columns: 286px minmax(0, 1fr);
-  min-height: 100vh;
+  height: 100vh;
+  min-height: 0;
+  overflow: hidden;
   background: var(--canvas);
 }
 
 .rail {
   display: grid;
-  grid-template-rows: auto 1fr auto;
+  grid-template-rows: auto minmax(0, 1fr);
   min-width: 0;
+  min-height: 0;
+  overflow: hidden;
   border-right: 1px solid var(--line);
   background: var(--rail);
 }
@@ -87,19 +91,10 @@ button {
 .window-chrome {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
   min-height: 44px;
-  padding: 12px 14px 6px 78px;
+  padding-left: 78px;
   -webkit-app-region: drag;
-}
-
-.app-mark {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 650;
+  -webkit-user-select: none;
 }
 
 .rail-actions {
@@ -291,38 +286,42 @@ button {
   color: var(--ink);
 }
 
-.rail-foot {
-  padding: 10px;
-  border-top: 1px solid rgba(221, 225, 231, 0.72);
-}
-
 .toast {
-  min-height: 34px;
+  position: fixed;
+  bottom: 16px;
+  left: 16px;
+  z-index: 100;
+  max-width: 260px;
+  min-height: 36px;
   border: 1px solid var(--line-soft);
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.72);
-  color: var(--muted);
+  background: rgba(31, 35, 40, 0.94);
+  box-shadow: var(--shadow-md);
+  color: #ffffff;
   font-size: 12px;
   line-height: 1.35;
-  padding: 8px 10px;
+  padding: 10px 12px;
+  pointer-events: none;
 }
 
 .main {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   min-width: 0;
+  min-height: 0;
+  overflow: hidden;
   background: var(--canvas);
 }
 
 .session-bar {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 12px;
+  display: flex;
   align-items: center;
   min-height: 42px;
   border-bottom: 1px solid var(--line);
   background: rgba(255, 255, 255, 0.78);
   padding: 5px 12px 5px 16px;
+  -webkit-app-region: drag;
+  -webkit-user-select: none;
 }
 
 .session-title {
@@ -349,19 +348,15 @@ button {
   white-space: nowrap;
 }
 
-.session-status {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: var(--muted);
-  font-size: 12px;
-  white-space: nowrap;
-}
-
 .status-dot {
   width: 7px;
   height: 7px;
   border-radius: 999px;
+  background: #9ca3af;
+  box-shadow: 0 0 0 4px rgba(156, 163, 175, 0.12);
+}
+
+.status-dot.running {
   background: #38a169;
   box-shadow: 0 0 0 4px rgba(56, 161, 105, 0.12);
 }
@@ -375,11 +370,13 @@ button {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 332px;
   min-height: 0;
+  overflow: hidden;
 }
 
 .canvas {
   min-width: 0;
   min-height: 0;
+  overflow: hidden;
   padding: 12px;
 }
 
@@ -585,8 +582,11 @@ button {
   display: grid;
   grid-template-rows: auto minmax(0, 0.92fr) minmax(0, 1fr);
   min-width: 0;
+  min-height: 0;
+  overflow: hidden;
   border-left: 1px solid var(--line);
   background: #f9fafb;
+  contain: layout paint;
 }
 
 .panel-section {
@@ -600,10 +600,15 @@ button {
 
 .config-panel {
   display: grid;
+  align-content: start;
   gap: 10px;
+  max-height: 52vh;
+  overflow: auto;
 }
 
 .config-panel.collapsed {
+  max-height: none;
+  overflow: hidden;
   padding: 10px 12px;
 }
 

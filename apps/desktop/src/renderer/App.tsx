@@ -1,10 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import {
-  toBridgeUiEvents,
-  type BridgeAcknowledgement,
-  type BridgeUiEvent,
-  type EventEnvelope
-} from "@agent-team/protocol";
+import type { BridgeUiEvent } from "@agent-team/protocol";
 import type {
   AgentPtyEvent as AgentProcessEvent,
   AgentPtySnapshot as AgentProcessSnapshot
@@ -23,15 +18,13 @@ type TodoState = "done" | "active" | "waiting";
 type IconName =
   | "plus"
   | "search"
-  | "settings"
   | "folder"
   | "edit"
   | "more"
   | "chevron"
   | "terminal"
   | "panel"
-  | "inbox"
-  | "bridge";
+  | "inbox";
 
 type RoleSpec = {
   key: RoleKey;
@@ -102,131 +95,6 @@ const initialCliDetections: Record<Cli, CliDetection> = {
   zcode: { id: "zcode", label: "Zcode", status: "missing", source: "missing", reason: "需要配置路径" }
 };
 
-const rawBridgeEventFixtures: EventEnvelope[] = [
-  {
-    version: 1,
-    eventId: "evt_task_assigned_ui",
-    sessionId: "ses_ui_flow",
-    createdAt: "2026-06-21T00:00:00.000Z",
-    type: "task.assigned",
-    fromAgentId: "planner",
-    toAgentId: "executor",
-    taskId: "task_ui_flow",
-    payload: {
-      objective: "实现 Agent Team Desktop 最小 UI 闭环",
-      scope: { paths: ["apps/desktop/**"], notes: "renderer mock flow" },
-      acceptance: [{ id: "acc_ui", text: "Todo and inbox derive from bridge events", required: true }],
-      assigneeAgentId: "executor",
-      assigneeRole: "executor"
-    }
-  },
-  {
-    version: 1,
-    eventId: "evt_task_completed_ui",
-    sessionId: "ses_ui_flow",
-    createdAt: "2026-06-21T00:01:00.000Z",
-    type: "task.completed",
-    fromAgentId: "executor",
-    toAgentId: "planner",
-    taskId: "task_ui_flow",
-    payload: {
-      taskId: "task_ui_flow",
-      changed: ["apps/desktop/src/renderer/App.tsx"],
-      tests: [{ command: "node scripts/smoke-test.mjs", cwd: ".", exitCode: 0 }],
-      risks: [],
-      summary: "完成代码修改并记录测试"
-    }
-  },
-  {
-    version: 1,
-    eventId: "evt_evidence_test_recorded_ui",
-    sessionId: "ses_ui_flow",
-    createdAt: "2026-06-21T00:02:00.000Z",
-    type: "evidence.test_recorded",
-    fromAgentId: "executor",
-    toAgentId: "planner",
-    taskId: "task_ui_flow",
-    payload: {
-      taskId: "task_ui_flow",
-      command: "node scripts/smoke-test.mjs",
-      cwd: ".",
-      exitCode: 0,
-      note: "renderer fixture test evidence"
-    }
-  },
-  {
-    version: 1,
-    eventId: "evt_evidence_diff_captured_ui",
-    sessionId: "ses_ui_flow",
-    createdAt: "2026-06-21T00:02:30.000Z",
-    type: "evidence.diff_captured",
-    fromAgentId: "executor",
-    toAgentId: "planner",
-    taskId: "task_ui_flow",
-    payload: {
-      taskId: "task_ui_flow",
-      baseRef: "HEAD",
-      headRef: "WORKTREE",
-      diffArtifactPath: ".agent-team/evidence/ui-flow.patch",
-      summary: "已捕获任务 diff"
-    }
-  },
-  {
-    version: 1,
-    eventId: "evt_review_requested_ui",
-    sessionId: "ses_ui_flow",
-    createdAt: "2026-06-21T00:03:00.000Z",
-    type: "review.requested",
-    fromAgentId: "planner",
-    toAgentId: "reviewer",
-    taskId: "task_ui_flow",
-    payload: {
-      taskId: "task_ui_flow",
-      reviewerAgentId: "reviewer",
-      focus: ["renderer", "bridge events"]
-    }
-  },
-  {
-    version: 1,
-    eventId: "evt_review_reported_ui",
-    sessionId: "ses_ui_flow",
-    createdAt: "2026-06-21T00:04:00.000Z",
-    type: "review.reported",
-    fromAgentId: "reviewer",
-    toAgentId: "planner",
-    taskId: "task_ui_flow",
-    payload: {
-      taskId: "task_ui_flow",
-      findings: [],
-      testGaps: [],
-      recommendation: "approve"
-    }
-  },
-  {
-    version: 1,
-    eventId: "evt_approval_granted_ui",
-    sessionId: "ses_ui_flow",
-    createdAt: "2026-06-21T00:05:00.000Z",
-    type: "approval.granted",
-    fromAgentId: "planner",
-    toAgentId: "executor",
-    taskId: "task_ui_flow",
-    payload: {
-      taskId: "task_ui_flow",
-      diffViewed: true,
-      evidenceIds: ["evt_task_completed_ui", "evt_evidence_test_recorded_ui", "evt_evidence_diff_captured_ui"],
-      note: "planner 已批准任务"
-    }
-  }
-];
-
-const bridgeAckFixtures: BridgeAcknowledgement[] = [
-  { agentId: "executor", eventId: "evt_task_assigned_ui", ackedAt: "2026-06-21T00:00:05.000Z" },
-  { agentId: "planner", eventId: "evt_task_completed_ui", ackedAt: "2026-06-21T00:01:05.000Z" },
-  { agentId: "planner", eventId: "evt_evidence_test_recorded_ui", ackedAt: "2026-06-21T00:02:05.000Z" },
-  { agentId: "planner", eventId: "evt_evidence_diff_captured_ui", ackedAt: "2026-06-21T00:02:35.000Z" }
-];
-
 function Icon({ name }: { name: IconName }) {
   return (
     <svg className="icon" aria-hidden="true" focusable="false">
@@ -283,6 +151,14 @@ function processRole(role: RoleSpec): "planner" | "executor" | "reviewer" {
   return role.key === "plannerReviewer" ? "planner" : role.key;
 }
 
+function processStatus(status?: AgentProcessSnapshot["status"], active = false) {
+  if (status === "running" && active) return { label: "工作中", tone: "running" };
+  if (status === "running") return { label: "已就绪", tone: "idle" };
+  if (status === "failed") return { label: "启动失败", tone: "warning" };
+  if (status === "exited") return { label: "已停止", tone: "idle" };
+  return { label: "等待中", tone: "idle" };
+}
+
 function hasBridgeEvent(events: BridgeUiEvent[], type: BridgeUiEvent["type"]) {
   return events.some((event) => event.type === type && event.status !== "waiting");
 }
@@ -311,10 +187,6 @@ function AppIcons() {
         <path d="m21 21-4.3-4.3" />
         <circle cx="11" cy="11" r="7" />
       </symbol>
-      <symbol id="icon-settings" viewBox="0 0 24 24">
-        <path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Z" />
-        <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.04.04a2 2 0 0 1-2.83 2.83l-.04-.04a1.7 1.7 0 0 0-1.88-.34 1.7 1.7 0 0 0-1.03 1.56V21a2 2 0 0 1-4 0v-.07a1.7 1.7 0 0 0-1.03-1.56 1.7 1.7 0 0 0-1.88.34l-.04.04a2 2 0 0 1-2.83-2.83l.04-.04A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.56-1.03H3a2 2 0 0 1 0-4h.07A1.7 1.7 0 0 0 4.6 8a1.7 1.7 0 0 0-.34-1.88l-.04-.04a2 2 0 0 1 2.83-2.83l.04.04A1.7 1.7 0 0 0 9 3.6 1.7 1.7 0 0 0 10.03 2H10a2 2 0 0 1 4 0v.07a1.7 1.7 0 0 0 1.03 1.56 1.7 1.7 0 0 0 1.88-.34l.04-.04a2 2 0 0 1 2.83 2.83l-.04.04A1.7 1.7 0 0 0 19.4 8a1.7 1.7 0 0 0 1.56 1.03H21a2 2 0 0 1 0 4h-.07A1.7 1.7 0 0 0 19.4 15Z" />
-      </symbol>
       <symbol id="icon-folder" viewBox="0 0 24 24">
         <path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H10l2 2h6.5A2.5 2.5 0 0 1 21 9.5v7A2.5 2.5 0 0 1 18.5 19h-13A2.5 2.5 0 0 1 3 16.5v-9Z" />
       </symbol>
@@ -342,10 +214,6 @@ function AppIcons() {
       <symbol id="icon-inbox" viewBox="0 0 24 24">
         <path d="M4 13h4l2 3h4l2-3h4" />
         <path d="M5 20h14a2 2 0 0 0 2-2v-6L17 4H7l-4 8v6a2 2 0 0 0 2 2Z" />
-      </symbol>
-      <symbol id="icon-bridge" viewBox="0 0 24 24">
-        <path d="M7 7h10M7 17h10" />
-        <path d="M9 7a3 3 0 1 1-3-3M15 17a3 3 0 1 0 3 3" />
       </symbol>
     </svg>
   );
@@ -445,10 +313,12 @@ export function App() {
   const [activeChatId, setActiveChatId] = useState("");
   const [openMenuProjectId, setOpenMenuProjectId] = useState<string | null>(null);
   const [nextChatNumber, setNextChatNumber] = useState(2);
-  const [toast, setToast] = useState("smux-bridge 就绪");
+  const [toast, setToast] = useState("");
   const [windows, setWindows] = useState<AgentWindow[]>([]);
   const [agentProcesses, setAgentProcesses] = useState<Record<string, AgentProcessSnapshot>>({});
   const [agentOutput, setAgentOutput] = useState<Record<string, string>>({});
+  const [activeAgents, setActiveAgents] = useState<Record<string, boolean>>({});
+  const activityTimersRef = useRef<Record<string, number>>({});
   const [runtimeBridgeEvents, setRuntimeBridgeEvents] = useState<BridgeUiEvent[]>([]);
   const { project: activeProject, chat: activeChat } = activeFrom(projects, activeProjectId, activeChatId);
   const roles = roleSets[teamSize];
@@ -509,6 +379,12 @@ export function App() {
   }, []);
 
   useEffect(() => {
+    if (!toast) return;
+    const timer = window.setTimeout(() => setToast(""), 3_000);
+    return () => window.clearTimeout(timer);
+  }, [toast]);
+
+  useEffect(() => {
     const api = window.agentTeam;
     if (!api) return;
 
@@ -522,8 +398,18 @@ export function App() {
           ...current,
           [event.agentId]: `${current[event.agentId] ?? ""}${event.data}`.slice(-100_000)
         }));
+        setActiveAgents((current) => ({ ...current, [event.agentId]: true }));
+        window.clearTimeout(activityTimersRef.current[event.agentId]);
+        activityTimersRef.current[event.agentId] = window.setTimeout(() => {
+          setActiveAgents((current) => ({ ...current, [event.agentId]: false }));
+          delete activityTimersRef.current[event.agentId];
+        }, 1_500);
       }
     });
+  }, []);
+
+  useEffect(() => () => {
+    for (const timer of Object.values(activityTimersRef.current)) window.clearTimeout(timer);
   }, []);
 
   const configSummary = useMemo(
@@ -538,9 +424,7 @@ export function App() {
   }, [cliDetections]);
 
   const bridgeEvents = useMemo(
-    () => activeChat?.teamCreated
-      ? runtimeBridgeEvents.length ? runtimeBridgeEvents : toBridgeUiEvents(rawBridgeEventFixtures, bridgeAckFixtures)
-      : [],
+    () => activeChat?.teamCreated ? runtimeBridgeEvents : [],
     [activeChat?.teamCreated, runtimeBridgeEvents]
   );
 
@@ -721,6 +605,7 @@ export function App() {
     }
 
     setAgentOutput({});
+    setActiveAgents({});
     const results = await Promise.allSettled(
       nextWindows.map((agent) => {
         const baseInput = {
@@ -757,12 +642,7 @@ export function App() {
       <main className="app">
         <aside className="rail" aria-label="项目与对话">
           <div>
-            <div className="window-chrome">
-              <div className="app-mark">
-                <Icon name="bridge" />
-                <span>Bridge</span>
-              </div>
-            </div>
+            <div className="window-chrome" aria-hidden="true" />
 
             <nav className="rail-actions">
               <button className="rail-action primary-action" type="button" onClick={() => addChat()}>
@@ -855,16 +735,9 @@ export function App() {
             </div>
           </div>
 
-          <div className="rail-foot">
-            <button className="rail-action" type="button" onClick={() => announce("设置已打开")}>
-              <Icon name="settings" />
-              <span>设置</span>
-            </button>
-            <div className="toast" role="status" aria-live="polite">
-              {toast}
-            </div>
-          </div>
         </aside>
+
+        {toast ? <div className="toast" role="status" aria-live="polite">{toast}</div> : null}
 
         <section className="main" aria-label="Agent 工作台">
           <header className="session-bar">
@@ -875,10 +748,6 @@ export function App() {
                   ? `${activeProject.name} · ${activeProject.branch} · ${activeProject.status} · 当前对话`
                   : "等待项目"}
               </div>
-            </div>
-            <div className="session-status">
-              <span className="status-dot" aria-hidden="true" />
-              <span>bridge online</span>
             </div>
           </header>
 
@@ -894,6 +763,7 @@ export function App() {
                   const process = agentProcesses[agentId];
                   const output = agentOutput[agentId] ?? "";
                   const running = process?.status === "running";
+                  const status = processStatus(process?.status, activeAgents[agentId]);
                   return (
                   <article className={`agent-window ${index === 0 ? "first" : ""}`} key={`${agent.key}-${agent.cli}`}>
                     <header className="window-head">
@@ -904,10 +774,10 @@ export function App() {
                       <div className="window-actions">
                       <span className="window-state">
                         <span
-                          className={`status-dot ${running ? "" : "warning"}`}
+                          className={`status-dot ${status.tone}`}
                           aria-hidden="true"
                         />
-                        {process?.status ?? "idle"}
+                        {status.label}
                       </span>
                       {running ? <button type="button" onClick={() => stopAgent(agent)}>停止</button> : null}
                       </div>
