@@ -373,14 +373,20 @@ export function createAgentPtyManager(onEvent: (event: AgentPtyEvent) => void): 
       const existing = processes.get(input.agentId);
       if (existing?.snapshot.status === "running") return { ...existing.snapshot };
 
-      const cols = Math.max(20, Math.min(input.cols ?? 100, 500));
-      const rows = Math.max(5, Math.min(input.rows ?? 30, 200));
+      const cols = Math.max(20, Math.min(input.cols ?? 120, 500));
+      const rows = Math.max(5, Math.min(input.rows ?? 36, 200));
       const terminal = pty.spawn(input.executable, input.args, {
         name: "xterm-256color",
         cols,
         rows,
         cwd: input.cwd,
-        env: { ...process.env, ...input.env }
+        env: {
+          ...process.env,
+          TERM: "xterm-256color",
+          COLORTERM: "truecolor",
+          FORCE_COLOR: "1",
+          ...input.env
+        }
       });
       const managed: ManagedPty = {
         terminal,

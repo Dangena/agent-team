@@ -7,7 +7,7 @@ import type {
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 
-const cliOptions = ["codex", "claudecode", "opencode", "mimocode", "zcode"] as const;
+const cliOptions = ["codex", "claudecode", "opencode", "mimocode"] as const;
 
 type Cli = (typeof cliOptions)[number];
 type CliStatus = "available" | "missing";
@@ -117,8 +117,7 @@ const initialCliDetections: Record<Cli, CliDetection> = {
   codex: { id: "codex", label: "Codex", status: "available", source: "PATH", version: "detected" },
   claudecode: { id: "claudecode", label: "Claude Code", status: "available", source: "PATH", version: "detected" },
   opencode: { id: "opencode", label: "OpenCode", status: "available", source: "PATH", version: "detected" },
-  mimocode: { id: "mimocode", label: "MiMo Code", status: "missing", source: "missing", reason: "需要配置路径" },
-  zcode: { id: "zcode", label: "Zcode", status: "missing", source: "missing", reason: "需要配置路径" }
+  mimocode: { id: "mimocode", label: "MiMo Code", status: "missing", source: "missing", reason: "需要配置路径" }
 };
 
 function Icon({ name }: { name: IconName }) {
@@ -156,18 +155,6 @@ function cliFieldDetail(cli: Cli, detections: Record<Cli, CliDetection>) {
 
 function cliStatusLabel(cli: Cli, detections: Record<Cli, CliDetection>) {
   return detections[cli].status === "available" ? "ready" : "needs path";
-}
-
-function cliTerminalLine(cli: Cli, detections: Record<Cli, CliDetection>) {
-  const detection = detections[cli];
-  return detection.status === "available"
-    ? `${detection.label} detected from ${detection.source}`
-    : `${detection.label} executable not configured`;
-}
-
-function terminalRole(role: RoleSpec) {
-  if (role.key === "solo") return "planner+executor+reviewer";
-  return role.key === "plannerReviewer" ? "planner+reviewer" : role.key;
 }
 
 function compactHash(value: string) {
@@ -292,12 +279,10 @@ function AppIcons() {
 
 function TerminalSurface({
   agentId,
-  intro,
   output,
   running
 }: {
   agentId: string;
-  intro: string;
   output: string;
   running: boolean;
 }) {
@@ -313,7 +298,7 @@ function TerminalSurface({
 
     const terminal = new Terminal({
       cursorBlink: true,
-      convertEol: true,
+      convertEol: false,
       fontFamily: '"SFMono-Regular", Consolas, "Liberation Mono", monospace',
       fontSize: 12,
       lineHeight: 1.35,
@@ -331,7 +316,7 @@ function TerminalSurface({
     const fitAddon = new FitAddon();
     terminal.loadAddon(fitAddon);
     terminal.open(host);
-    terminal.writeln(intro);
+    terminal.focus();
     if (output) terminal.write(output);
     outputOffsetRef.current = output.length;
     terminalRef.current = terminal;
@@ -350,14 +335,17 @@ function TerminalSurface({
     const dataSubscription = terminal.onData((data) => {
       if (runningRef.current) void window.agentTeam?.writeTerminal(agentId, data);
     });
+    const focusTerminal = () => terminal.focus();
+    host.addEventListener("pointerdown", focusTerminal);
 
     return () => {
       observer.disconnect();
       dataSubscription.dispose();
+      host.removeEventListener("pointerdown", focusTerminal);
       terminal.dispose();
       terminalRef.current = null;
     };
-  }, [agentId, intro]);
+  }, [agentId]);
 
   useEffect(() => {
     const terminal = terminalRef.current;
@@ -386,6 +374,8 @@ export function App() {
   const [searchQuery, setSearchQuery] = useState("");
   const [openMenuProjectId, setOpenMenuProjectId] = useState<string | null>(null);
   const [openMenuChatKey, setOpenMenuChatKey] = useState<string | null>(null);
+  const [editingChatKey, setEditingChatKey] = useState<string | null>(null);
+  const [editingChatTitle, setEditingChatTitle] = useState("");
   const [nextChatNumber, setNextChatNumber] = useState(2);
   const [toast, setToast] = useState("");
   const [agentProcesses, setAgentProcesses] = useState<Record<string, AgentProcessSnapshot>>({});
@@ -629,6 +619,8 @@ export function App() {
     setActiveChatId(project.chats[0]?.id ?? "");
     setOpenMenuProjectId(null);
     setOpenMenuChatKey(null);
+    setEditingChatKey(null);
+    setEditingChatTitle("");
   }
 
   function selectChat(projectId: string, chatId: string) {
@@ -636,6 +628,8 @@ export function App() {
     setActiveChatId(chatId);
     setOpenMenuProjectId(null);
     setOpenMenuChatKey(null);
+    setEditingChatKey(null);
+    setEditingChatTitle("");
   }
 
   async function addProject() {
@@ -662,6 +656,8 @@ export function App() {
     setActiveChatId(chatId);
     setOpenMenuProjectId(null);
     setOpenMenuChatKey(null);
+    setEditingChatKey(null);
+    setEditingChatTitle("");
     announce(`已导入 ${project.name}`);
   }
 
@@ -686,6 +682,8 @@ export function App() {
     setActiveChatId(chat.id);
     setOpenMenuProjectId(null);
     setOpenMenuChatKey(null);
+    setEditingChatKey(null);
+    setEditingChatTitle("");
     setNextChatNumber((value) => value + 1);
     announce("新对话已创建");
   }
@@ -752,13 +750,24 @@ export function App() {
     return `${projectId}:${chatId}`;
   }
 
-  function renameChat(projectId: string, chatId: string) {
-    const project = projects.find((item) => item.id === projectId);
-    const chat = project?.chats.find((item) => item.id === chatId);
-    const nextName = window.prompt("重命名对话", chat?.title ?? "");
-    const trimmed = nextName?.trim();
+  function beginRenameChat(projectId: string, chat: Chat) {
+    setOpenMenuChatKey(null);
+    setOpenMenuProjectId(null);
+    setEditingChatKey(chatMenuKey(projectId, chat.id));
+    setEditingChatTitle(chat.title);
+  }
+
+  function cancelRenameChat() {
+    setEditingChatKey(null);
+    setEditingChatTitle("");
+  }
+
+  function commitRenameChat(projectId: string, chatId: string) {
+    if (editingChatKey !== chatMenuKey(projectId, chatId)) return;
+
+    const trimmed = editingChatTitle.trim();
     if (!trimmed) {
-      setOpenMenuChatKey(null);
+      cancelRenameChat();
       return;
     }
 
@@ -772,7 +781,7 @@ export function App() {
           : project
       )
     );
-    setOpenMenuChatKey(null);
+    cancelRenameChat();
     announce("对话已重命名");
   }
 
@@ -793,6 +802,7 @@ export function App() {
       setActiveChatId(nextChat?.id ?? "");
     }
     setOpenMenuChatKey(null);
+    cancelRenameChat();
     announce("对话已移除");
   }
 
@@ -946,41 +956,70 @@ export function App() {
                   ) : null}
 
                   <div className="chat-list">
-                    {project.chats.map((chat) => (
-                      <div className="chat-item" key={chat.id}>
-                        <button
-                          className={`chat-row ${chat.id === activeChat?.id ? "active" : ""}`}
-                          type="button"
-                          onClick={() => selectChat(project.id, chat.id)}
-                        >
-                          <strong>{chat.title}</strong>
-                          <time>{chat.time}</time>
-                        </button>
-                        <button
-                          className="icon-button chat-menu-trigger"
-                          type="button"
-                          aria-label="对话菜单"
-                          onClick={() => {
-                            setOpenMenuProjectId(null);
-                            setOpenMenuChatKey((current) =>
-                              current === chatMenuKey(project.id, chat.id) ? null : chatMenuKey(project.id, chat.id)
-                            );
-                          }}
-                        >
-                          <Icon name="more" />
-                        </button>
-                        {openMenuChatKey === chatMenuKey(project.id, chat.id) ? (
-                          <div className="chat-menu">
-                            <button type="button" onClick={() => renameChat(project.id, chat.id)}>
-                              重命名对话
+                    {project.chats.map((chat) => {
+                      const key = chatMenuKey(project.id, chat.id);
+                      const editing = editingChatKey === key;
+                      return (
+                        <div className="chat-item" key={chat.id}>
+                          {editing ? (
+                            <input
+                              className="chat-rename-input"
+                              aria-label="对话名称"
+                              autoFocus
+                              value={editingChatTitle}
+                              onChange={(event) => setEditingChatTitle(event.target.value)}
+                              onBlur={() => commitRenameChat(project.id, chat.id)}
+                              onKeyDown={(event) => {
+                                if (event.key === "Enter") {
+                                  event.preventDefault();
+                                  commitRenameChat(project.id, chat.id);
+                                }
+                                if (event.key === "Escape") {
+                                  event.preventDefault();
+                                  cancelRenameChat();
+                                }
+                              }}
+                            />
+                          ) : (
+                            <button
+                              className={`chat-row ${chat.id === activeChat?.id ? "active" : ""}`}
+                              type="button"
+                              onClick={() => selectChat(project.id, chat.id)}
+                            >
+                              <strong>{chat.title}</strong>
+                              <time>{chat.time}</time>
                             </button>
-                            <button type="button" onClick={() => removeChat(project.id, chat.id)}>
-                              移除对话
+                          )}
+                          {!editing ? (
+                            <button
+                              className="icon-button chat-menu-trigger"
+                              type="button"
+                              aria-label="对话菜单"
+                              onClick={() => {
+                                setOpenMenuProjectId(null);
+                                setEditingChatKey(null);
+                                setEditingChatTitle("");
+                                setOpenMenuChatKey((current) =>
+                                  current === key ? null : key
+                                );
+                              }}
+                            >
+                              <Icon name="more" />
                             </button>
-                          </div>
-                        ) : null}
-                      </div>
-                    ))}
+                          ) : null}
+                          {openMenuChatKey === key ? (
+                            <div className="chat-menu">
+                              <button type="button" onClick={() => beginRenameChat(project.id, chat)}>
+                                重命名对话
+                              </button>
+                              <button type="button" onClick={() => removeChat(project.id, chat.id)}>
+                                移除对话
+                              </button>
+                            </div>
+                          ) : null}
+                        </div>
+                      );
+                    })}
                   </div>
                 </section>
               ))}
@@ -1039,7 +1078,6 @@ export function App() {
                     </header>
                     <TerminalSurface
                       agentId={agentId}
-                      intro={`AGENT_TEAM_ROLE=${terminalRole(agent)}\r\n$ ${agent.cli} --workspace agent-team-desktop\r\n${cliTerminalLine(agent.cli, cliDetections)}\r\n`}
                       output={output}
                       running={running}
                     />
