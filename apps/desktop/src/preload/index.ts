@@ -16,6 +16,7 @@ export type AgentTeamApi = {
   listWorkspaces(): Promise<WorkspaceRecord[]>;
   importWorkspace(): Promise<WorkspaceRecord | null>;
   removeWorkspace(workspaceId: string): Promise<boolean>;
+  showWorkspaceInFolder(workspaceId: string): Promise<boolean>;
   listBridgeUiEvents(sessionId: string): Promise<BridgeUiEvent[]>;
   startFakeAgent(input: StartFakeAgentInput): Promise<AgentProcessSnapshot>;
   startAgent(input: StartAgentInput): Promise<AgentProcessSnapshot>;
@@ -47,6 +48,9 @@ export const api: AgentTeamApi = {
   },
   removeWorkspace(workspaceId) {
     return ipcRenderer.invoke("agent-team:remove-workspace", workspaceId);
+  },
+  showWorkspaceInFolder(workspaceId) {
+    return ipcRenderer.invoke("agent-team:show-workspace-in-folder", workspaceId);
   },
   startFakeAgent(input) {
     return ipcRenderer.invoke("agent-team:start-fake-agent", input);

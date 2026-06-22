@@ -186,7 +186,7 @@ button {
 
 .project-card {
   position: relative;
-  overflow: hidden;
+  overflow: visible;
   border: 1px solid transparent;
   border-radius: 10px;
 }
@@ -304,25 +304,23 @@ button {
 }
 
 .project-menu {
-  position: absolute;
-  top: 38px;
-  right: 8px;
-  z-index: 10;
   display: grid;
-  min-width: 142px;
+  min-width: 0;
   overflow: hidden;
+  margin: 4px 8px 7px 30px;
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: 9px;
   background: var(--surface);
-  box-shadow: var(--shadow-md);
+  box-shadow: var(--shadow-sm);
 }
 
 .project-menu button {
-  min-height: 36px;
+  min-height: 32px;
   border: 0;
   background: transparent;
   color: var(--ink-soft);
-  padding: 0 12px;
+  padding: 0 10px;
+  font-size: 12px;
   text-align: left;
 }
 
@@ -401,9 +399,19 @@ button {
   box-shadow: 0 0 0 4px rgba(156, 163, 175, 0.12);
 }
 
+.status-dot.ready {
+  background: var(--primary);
+  box-shadow: 0 0 0 4px rgba(79, 99, 215, 0.12);
+}
+
 .status-dot.running {
   background: #38a169;
   box-shadow: 0 0 0 4px rgba(56, 161, 105, 0.12);
+}
+
+.status-dot.stopped {
+  background: #8b96a8;
+  box-shadow: 0 0 0 4px rgba(139, 150, 168, 0.13);
 }
 
 .status-dot.warning {
@@ -539,6 +547,22 @@ button {
   gap: 6px;
   color: var(--muted);
   font-size: 12px;
+}
+
+.window-state.ready {
+  color: var(--primary);
+}
+
+.window-state.running {
+  color: var(--success);
+}
+
+.window-state.stopped {
+  color: var(--terminal-muted);
+}
+
+.window-state.warning {
+  color: var(--warning);
 }
 
 .window-actions {

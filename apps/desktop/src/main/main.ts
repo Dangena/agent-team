@@ -190,6 +190,13 @@ function registerIpcHandlers() {
     assertTrustedIpcSender(event);
     return getRepository().removeWorkspace(workspaceId);
   });
+  ipcMain.handle("agent-team:show-workspace-in-folder", (event, workspaceId: string) => {
+    assertTrustedIpcSender(event);
+    const workspace = getRepository().listWorkspaces().find((item) => item.id === workspaceId);
+    if (!workspace?.available || !existsSync(workspace.path)) return false;
+    shell.showItemInFolder(workspace.path);
+    return true;
+  });
   ipcMain.handle(
     "agent-team:start-fake-agent",
     (event, input: StartFakeAgentInput): AgentProcessSnapshot => {

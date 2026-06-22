@@ -167,10 +167,10 @@ function processRole(role: RoleSpec): "planner" | "executor" | "reviewer" {
 
 function processStatus(status?: AgentProcessSnapshot["status"], active = false) {
   if (status === "running" && active) return { label: "工作中", tone: "running" };
-  if (status === "running") return { label: "已就绪", tone: "idle" };
+  if (status === "running") return { label: "已就绪", tone: "ready" };
   if (status === "failed") return { label: "启动失败", tone: "warning" };
-  if (status === "exited") return { label: "已停止", tone: "idle" };
-  return { label: "等待中", tone: "idle" };
+  if (status === "exited") return { label: "已停止", tone: "stopped" };
+  return { label: "等待中", tone: "pending" };
 }
 
 function hasBridgeEvent(events: BridgeUiEvent[], type: BridgeUiEvent["type"]) {
@@ -319,6 +319,7 @@ function TerminalSurface({
 
 export function App() {
   const [cliDetections, setCliDetections] = useState(initialCliDetections);
+  const [platformId, setPlatformId] = useState("");
   const [teamSize, setTeamSize] = useState<TeamSize>(3);
   const [assignments, setAssignments] = useState<Assignments>(initialAssignments);
   const [configCollapsed, setConfigCollapsed] = useState(false);
@@ -337,8 +338,10 @@ export function App() {
   const { project: activeProject, chat: activeChat } = activeFrom(projects, activeProjectId, activeChatId);
   const roles = roleSets[teamSize];
   const activeWindows = activeChat?.windows ?? [];
+  const revealWorkspaceLabel = platformId === "macos" ? "在 Finder 中显示" : "在文件夹中显示";
 
   useEffect(() => {
+    void window.agentTeam?.getBootstrap().then((bootstrap) => setPlatformId(bootstrap.platformId));
     void window.agentTeam?.listCliAdapters().then((detections) => {
       setCliDetections((current) => {
         const next = { ...current };
@@ -475,8 +478,8 @@ export function App() {
       {
         state: activeChat ? "done" : "active",
         label: activeChat ? "done" : "next",
-        title: "识别对话目标",
-        detail: activeChat ? `${activeChat.title} · 已提取工作区目标` : "等待当前对话"
+        title: "选择工作区会话",
+        detail: activeChat ? `${activeChat.title} · 当前会话已选中` : "等待当前对话"
       },
       {
         state: teamCreated ? "done" : "active",
@@ -591,15 +594,39 @@ export function App() {
   }
 
   function renameProject(projectId: string) {
+    const project = projects.find((item) => item.id === projectId);
+    const nextName = window.prompt("重命名项目", project?.name ?? "");
+    const trimmed = nextName?.trim();
+    if (!trimmed) {
+      setOpenMenuProjectId(null);
+      return;
+    }
+
     setProjects((current) =>
       current.map((project) =>
-        project.id === projectId && !project.name.endsWith(" updated")
-          ? { ...project, name: `${project.name} updated` }
+        project.id === projectId
+          ? { ...project, name: trimmed }
           : project
       )
     );
     setOpenMenuProjectId(null);
     announce("项目已重命名");
+  }
+
+  function pinProject(projectId: string) {
+    setProjects((current) => {
+      const project = current.find((item) => item.id === projectId);
+      if (!project) return current;
+      return [project, ...current.filter((item) => item.id !== projectId)];
+    });
+    setOpenMenuProjectId(null);
+    announce("项目已置顶");
+  }
+
+  async function showProjectInFolder(projectId: string) {
+    const shown = await window.agentTeam?.showWorkspaceInFolder(projectId);
+    setOpenMenuProjectId(null);
+    announce(shown ? "已打开项目位置" : "项目位置不可用");
   }
 
   function removeProject(projectId: string) {
@@ -748,6 +775,23 @@ export function App() {
                     <Icon name="edit" />
                   </button>
 
+                  {openMenuProjectId === project.id ? (
+                    <div className="project-menu">
+                      <button type="button" onClick={() => pinProject(project.id)}>
+                        置顶项目
+                      </button>
+                      <button type="button" onClick={() => renameProject(project.id)}>
+                        重命名项目
+                      </button>
+                      <button type="button" onClick={() => void showProjectInFolder(project.id)}>
+                        {revealWorkspaceLabel}
+                      </button>
+                      <button type="button" onClick={() => removeProject(project.id)}>
+                        移除项目
+                      </button>
+                    </div>
+                  ) : null}
+
                   <div className="chat-list">
                     {project.chats.map((chat) => (
                       <button
@@ -761,26 +805,6 @@ export function App() {
                       </button>
                     ))}
                   </div>
-
-                  {openMenuProjectId === project.id ? (
-                    <div className="project-menu">
-                      <button type="button" onClick={() => renameProject(project.id)}>
-                        重命名项目
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setOpenMenuProjectId(null);
-                          announce("项目路径已复制到 Bridge");
-                        }}
-                      >
-                        复制路径
-                      </button>
-                      <button type="button" onClick={() => removeProject(project.id)}>
-                        移除项目
-                      </button>
-                    </div>
-                  ) : null}
                 </section>
               ))}
               {!filteredProjects.length ? (
@@ -826,7 +850,7 @@ export function App() {
                         <span className={`role ${agent.roleClass}`}>{agent.label}</span>
                       </div>
                       <div className="window-actions">
-                      <span className="window-state">
+                      <span className={`window-state ${status.tone}`}>
                         <span
                           className={`status-dot ${status.tone}`}
                           aria-hidden="true"

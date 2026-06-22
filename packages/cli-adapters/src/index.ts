@@ -259,6 +259,11 @@ function configuredExecutableMap(
   return executable ? { [id]: executable } : {};
 }
 
+function launchArgsFor(id: BuiltInCliAdapterId, role: AgentRole): string[] {
+  if (id === "mimocode") return [];
+  return [buildRolePrompt(role)];
+}
+
 export function createBuiltInAdapter(
   id: BuiltInCliAdapterId,
   configuredExecutable?: string,
@@ -286,7 +291,7 @@ export function createBuiltInAdapter(
 
       return {
         executable: detection.executable,
-        args: [buildRolePrompt(context.role)],
+        args: launchArgsFor(id, context.role),
         env: context.bridgeEnv,
         cwd: context.workspacePath
       };
