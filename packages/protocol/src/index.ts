@@ -28,6 +28,8 @@ export type AgentTeamEventType =
   | "session.resumed"
   | "session.completed"
   | "session.failed"
+  | "todo.created"
+  | "todo.updated"
   | "task.created"
   | "task.assigned"
   | "task.acknowledged"
@@ -53,6 +55,28 @@ export type AgentDescriptor = {
 export type TaskScopePayload = {
   paths: string[];
   notes?: string;
+};
+
+export type TodoStatus = "pending" | "active" | "blocked" | "completed";
+
+export type TodoCreatedPayload = {
+  id: string;
+  title: string;
+  detail?: string;
+  ownerAgentId?: AgentId;
+  ownerRole?: AgentRole;
+  status: TodoStatus;
+  evidenceIds?: string[];
+};
+
+export type TodoUpdatedPayload = {
+  id: string;
+  title?: string;
+  detail?: string;
+  ownerAgentId?: AgentId;
+  ownerRole?: AgentRole;
+  status?: TodoStatus;
+  evidenceIds?: string[];
 };
 
 export type AcceptancePayload = {
@@ -173,6 +197,8 @@ export type EventPayloadByType = {
   "session.resumed": SessionLifecyclePayload;
   "session.completed": SessionLifecyclePayload;
   "session.failed": SessionLifecyclePayload;
+  "todo.created": TodoCreatedPayload;
+  "todo.updated": TodoUpdatedPayload;
   "task.created": TaskCreatedPayload;
   "task.assigned": TaskAssignedPayload;
   "task.acknowledged": TaskAcknowledgedPayload;
@@ -266,6 +292,7 @@ export type BridgeUiEvent = {
   status: BridgeUiEventStatus;
   summary: string;
   time: IsoTimestamp | "";
+  payload: unknown;
 };
 
 export type BridgeRequest<TPayload = unknown> = {
@@ -337,6 +364,14 @@ function bridgeUiEventSummary(event: EventEnvelope): string {
   const payload = eventPayloadObject(event);
 
   switch (event.type) {
+    case "todo.created":
+      return typeof payload.title === "string" && payload.title
+        ? `新增 Todo：${payload.title}`
+        : "新增 Todo";
+    case "todo.updated":
+      return typeof payload.title === "string" && payload.title
+        ? `更新 Todo：${payload.title}`
+        : "更新 Todo";
     case "task.assigned":
       return typeof payload.objective === "string" && payload.objective
         ? `派发任务：${payload.objective}`
@@ -386,6 +421,7 @@ export function toBridgeUiEvents(
     taskId: event.taskId ?? null,
     status: bridgeUiEventStatus(event, indexedAcks),
     summary: bridgeUiEventSummary(event),
-    time: event.createdAt ?? ""
+    time: event.createdAt ?? "",
+    payload: event.payload
   }));
 }

@@ -884,6 +884,10 @@ button {
   color: var(--primary);
 }
 
+.todo-item.blocked {
+  color: var(--warning);
+}
+
 .todo-item.waiting {
   color: var(--muted-2);
 }
@@ -914,6 +918,12 @@ button {
   border-color: rgba(79, 99, 215, 0.24);
   background: var(--primary-soft);
   color: var(--primary);
+}
+
+.todo-item.blocked .todo-marker {
+  border-color: rgba(154, 100, 13, 0.24);
+  background: var(--warning-soft);
+  color: var(--warning);
 }
 
 .todo-item.waiting .todo-marker {

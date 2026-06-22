@@ -39,14 +39,14 @@ export type BridgeRuntime = {
 
 function roleCanSendEvent(role: BridgeRequest["role"], type: EventEnvelope["type"]): boolean {
   if (role === "planner") {
-    return type.startsWith("session.") || type === "task.created" || type === "task.assigned" ||
+    return type.startsWith("session.") || type.startsWith("todo.") || type === "task.created" || type === "task.assigned" ||
       type === "review.requested" || type.startsWith("approval.") || type === "evidence.diff_captured";
   }
   if (role === "executor") {
     return type === "task.acknowledged" || type === "task.started" || type === "task.blocked" ||
-      type === "task.completed" || type.startsWith("evidence.");
+      type === "task.completed" || type === "todo.updated" || type.startsWith("evidence.");
   }
-  if (role === "reviewer") return type === "review.reported";
+  if (role === "reviewer") return type === "review.reported" || type === "todo.updated";
   return false;
 }
 

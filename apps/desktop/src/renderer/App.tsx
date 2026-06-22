@@ -14,7 +14,7 @@ type CliStatus = "available" | "missing";
 type TeamSize = 1 | 2 | 3;
 type RoleClass = "plan" | "exec" | "review";
 type RoleKey = "planner" | "plannerReviewer" | "executor" | "reviewer";
-type TodoState = "done" | "active" | "waiting";
+type TodoState = "done" | "active" | "blocked" | "waiting";
 type IconName =
   | "plus"
   | "search"
@@ -65,6 +65,14 @@ type Project = {
 };
 
 type Assignments = Partial<Record<RoleKey, Cli>>;
+
+type TodoDisplayItem = {
+  id: string;
+  state: TodoState;
+  label: string;
+  title: string;
+  detail: string;
+};
 
 const roleSets: Record<TeamSize, RoleSpec[]> = {
   1: [{ key: "executor", label: "执行", roleClass: "exec", defaultCli: "claudecode" }],
@@ -189,6 +197,37 @@ function eventMessageClass(event: BridgeUiEvent) {
 
 function eventTitle(event: BridgeUiEvent) {
   return event.to ? `${event.type} -> ${event.to}` : event.type;
+}
+
+function objectPayload(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" ? value as Record<string, unknown> : {};
+}
+
+function optionalString(value: unknown) {
+  return typeof value === "string" && value.trim() ? value.trim() : "";
+}
+
+function todoStateFrom(status: unknown): TodoState {
+  if (status === "completed") return "done";
+  if (status === "active") return "active";
+  if (status === "blocked") return "blocked";
+  return "waiting";
+}
+
+function todoLabelFrom(state: TodoState) {
+  if (state === "done") return "done";
+  if (state === "active") return "next";
+  if (state === "blocked") return "block";
+  return "wait";
+}
+
+function todoDetailFrom(payload: Record<string, unknown>, fallbackOwner: string) {
+  const detail = optionalString(payload.detail);
+  const owner = optionalString(payload.ownerRole) || optionalString(payload.ownerAgentId) || fallbackOwner;
+  const evidence = Array.isArray(payload.evidenceIds) && payload.evidenceIds.length
+    ? ` · ${payload.evidenceIds.length} 条证据`
+    : "";
+  return detail || owner ? `${owner}${detail ? ` · ${detail}` : ""}${evidence}` : "等待更新";
 }
 
 function AppIcons() {
@@ -462,7 +501,29 @@ export function App() {
       .filter((project): project is Project => Boolean(project));
   }, [projects, searchQuery]);
 
-  const todoItems = useMemo(() => {
+  const realTodoItems = useMemo(() => {
+    const items = new Map<string, TodoDisplayItem>();
+    for (const event of bridgeEvents) {
+      if (event.type !== "todo.created" && event.type !== "todo.updated") continue;
+      const payload = objectPayload(event.payload);
+      const id = optionalString(payload.id);
+      if (!id) continue;
+
+      const current = items.get(id);
+      const title = optionalString(payload.title) || current?.title || id;
+      const state = payload.status ? todoStateFrom(payload.status) : current?.state ?? "waiting";
+      items.set(id, {
+        id,
+        state,
+        label: todoLabelFrom(state),
+        title,
+        detail: todoDetailFrom(payload, event.from) || current?.detail || "等待更新"
+      });
+    }
+    return [...items.values()];
+  }, [bridgeEvents]);
+
+  const fallbackTodoItems = useMemo(() => {
     const hasReviewer = roles.some((role) => role.key === "reviewer" || role.key === "plannerReviewer");
     const plannerCli = assignments.planner ?? assignments.plannerReviewer ?? "codex";
     const executorCli = assignments.executor ?? "claudecode";
@@ -474,26 +535,30 @@ export function App() {
     const reviewReported = hasBridgeEvent(bridgeEvents, "review.reported");
     const approvalGranted = hasBridgeEvent(bridgeEvents, "approval.granted");
 
-    const items: Array<{ state: TodoState; label: string; title: string; detail: string }> = [
+    const items: TodoDisplayItem[] = [
       {
+        id: "select-session",
         state: activeChat ? "done" : "active",
         label: activeChat ? "done" : "next",
         title: "选择工作区会话",
         detail: activeChat ? `${activeChat.title} · 当前会话已选中` : "等待当前对话"
       },
       {
+        id: "create-windows",
         state: teamCreated ? "done" : "active",
         label: teamCreated ? "done" : "next",
         title: "生成 Agent 窗口",
         detail: teamCreated ? `${activeWindows.length || teamSize} 个窗口已连接 smux-bridge` : "等待创建当前对话的 Agent 窗口"
       },
       {
+        id: "assign-task",
         state: taskAssigned ? "done" : teamCreated ? "active" : "waiting",
         label: taskAssigned ? "done" : teamCreated ? "next" : "wait",
         title: "派发执行任务",
         detail: taskAssigned ? `${plannerCli} -> ${executorCli} · task.assigned 已 ACK` : `${plannerCli} 准备任务包`
       },
       {
+        id: "complete-task",
         state: taskCompleted ? "done" : taskAssigned ? "active" : "waiting",
         label: taskCompleted ? "done" : taskAssigned ? "next" : "wait",
         title: "回收执行结果",
@@ -504,12 +569,14 @@ export function App() {
     items.push(
       hasReviewer
         ? {
+            id: "review-task",
             state: reviewReported ? "done" : reviewRequested || taskCompleted ? "active" : "waiting",
             label: reviewReported ? "done" : reviewRequested || taskCompleted ? "next" : "wait",
             title: "审查 Diff 与证据",
             detail: reviewReported ? `${reviewerCli} 已提交 review.reported` : `${reviewerCli} 等待 review.requested`
           }
         : {
+            id: "sync-result",
             state: taskCompleted ? "active" : "waiting",
             label: taskCompleted ? "next" : "wait",
             title: "回写执行结果",
@@ -518,6 +585,7 @@ export function App() {
     );
 
     items.push({
+      id: "approve-task",
       state: approvalGranted ? "done" : reviewReported || (!hasReviewer && taskCompleted) ? "active" : "waiting",
       label: approvalGranted ? "done" : reviewReported || (!hasReviewer && taskCompleted) ? "next" : "wait",
       title: "验收并批准",
@@ -526,6 +594,8 @@ export function App() {
 
     return items;
   }, [activeChat, assignments, bridgeEvents, roles, teamSize]);
+
+  const todoItems = realTodoItems.length ? realTodoItems : fallbackTodoItems;
 
   function announce(message: string) {
     setToast(message);
@@ -939,11 +1009,11 @@ export function App() {
               <section className="panel-section todo">
                 <div className="panel-title">
                   <span>Todo List</span>
-                  <span className="sync-pill">auto</span>
+                  <span className="sync-pill">{realTodoItems.length ? "live" : "flow"}</span>
                 </div>
                 <div className="todo-feed" role="list">
                   {todoItems.map((todo) => (
-                    <div className={`todo-item ${todo.state}`} role="listitem" key={todo.title}>
+                    <div className={`todo-item ${todo.state}`} role="listitem" key={todo.id}>
                       <span className="todo-marker">{todo.label}</span>
                       <span className="todo-text">
                         <strong>{todo.title}</strong>
