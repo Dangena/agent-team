@@ -260,6 +260,12 @@ button {
   padding: 0 0 6px 30px;
 }
 
+.chat-item {
+  position: relative;
+  display: grid;
+  min-width: 0;
+}
+
 .chat-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -269,7 +275,7 @@ button {
   border-radius: 7px;
   background: transparent;
   color: var(--ink-soft);
-  padding: 0 7px;
+  padding: 0 31px 0 7px;
   text-align: left;
 }
 
@@ -291,6 +297,45 @@ button {
   color: var(--muted-2);
   font-size: 11px;
   white-space: nowrap;
+}
+
+.chat-menu-trigger {
+  position: absolute;
+  top: 1px;
+  right: 2px;
+  width: 28px;
+  height: 28px;
+  opacity: 0;
+}
+
+.chat-item:hover .chat-menu-trigger,
+.chat-item:focus-within .chat-menu-trigger {
+  opacity: 1;
+}
+
+.chat-menu {
+  display: grid;
+  overflow: hidden;
+  margin: 2px 6px 5px 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.chat-menu button {
+  min-height: 30px;
+  border: 0;
+  background: transparent;
+  color: var(--ink-soft);
+  padding: 0 10px;
+  font-size: 12px;
+  text-align: left;
+}
+
+.chat-menu button:hover {
+  background: var(--surface-soft);
+  color: var(--ink);
 }
 
 .empty-filter {

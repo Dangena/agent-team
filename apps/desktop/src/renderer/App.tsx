@@ -13,7 +13,8 @@ type Cli = (typeof cliOptions)[number];
 type CliStatus = "available" | "missing";
 type TeamSize = 1 | 2 | 3;
 type RoleClass = "plan" | "exec" | "review";
-type RoleKey = "planner" | "plannerReviewer" | "executor" | "reviewer";
+type RoleKey = "solo" | "planner" | "plannerReviewer" | "executor" | "reviewer";
+type PromptProfile = "standard" | "solo" | "plannerReviewer";
 type TodoState = "done" | "active" | "blocked" | "waiting";
 type IconName =
   | "plus"
@@ -31,6 +32,7 @@ type RoleSpec = {
   label: string;
   roleClass: RoleClass;
   defaultCli: Cli;
+  promptProfile?: PromptProfile;
 };
 
 type AgentWindow = RoleSpec & {
@@ -75,9 +77,23 @@ type TodoDisplayItem = {
 };
 
 const roleSets: Record<TeamSize, RoleSpec[]> = {
-  1: [{ key: "executor", label: "执行", roleClass: "exec", defaultCli: "claudecode" }],
+  1: [
+    {
+      key: "solo",
+      label: "规划、执行、审查",
+      roleClass: "plan",
+      defaultCli: "claudecode",
+      promptProfile: "solo"
+    }
+  ],
   2: [
-    { key: "plannerReviewer", label: "规划、审查", roleClass: "plan", defaultCli: "codex" },
+    {
+      key: "plannerReviewer",
+      label: "规划、审查",
+      roleClass: "plan",
+      defaultCli: "codex",
+      promptProfile: "plannerReviewer"
+    },
     { key: "executor", label: "执行", roleClass: "exec", defaultCli: "claudecode" }
   ],
   3: [
@@ -90,6 +106,7 @@ const roleSets: Record<TeamSize, RoleSpec[]> = {
 const initialProjects: Project[] = [];
 
 const initialAssignments: Assignments = {
+  solo: "claudecode",
   planner: "codex",
   plannerReviewer: "codex",
   executor: "claudecode",
@@ -149,6 +166,7 @@ function cliTerminalLine(cli: Cli, detections: Record<Cli, CliDetection>) {
 }
 
 function terminalRole(role: RoleSpec) {
+  if (role.key === "solo") return "planner+executor+reviewer";
   return role.key === "plannerReviewer" ? "planner+reviewer" : role.key;
 }
 
@@ -170,7 +188,7 @@ function bridgeAgentIdFor(role: RoleSpec) {
 }
 
 function processRole(role: RoleSpec): "planner" | "executor" | "reviewer" {
-  return role.key === "plannerReviewer" ? "planner" : role.key;
+  return role.key === "solo" || role.key === "plannerReviewer" ? "planner" : role.key;
 }
 
 function processStatus(status?: AgentProcessSnapshot["status"], active = false) {
@@ -367,6 +385,7 @@ export function App() {
   const [activeChatId, setActiveChatId] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [openMenuProjectId, setOpenMenuProjectId] = useState<string | null>(null);
+  const [openMenuChatKey, setOpenMenuChatKey] = useState<string | null>(null);
   const [nextChatNumber, setNextChatNumber] = useState(2);
   const [toast, setToast] = useState("");
   const [agentProcesses, setAgentProcesses] = useState<Record<string, AgentProcessSnapshot>>({});
@@ -471,8 +490,10 @@ export function App() {
   }, []);
 
   const configSummary = useMemo(
-    () => `${teamSize} 人团队 · ${roles.map((role) => assignments[role.key] ?? role.defaultCli).join(" / ")}`,
-    [assignments, roles, teamSize]
+    () => `${teamSize} 人团队 · ${roles
+      .map((role) => cliDetections[assignments[role.key] ?? role.defaultCli].label)
+      .join(" / ")}`,
+    [assignments, cliDetections, roles, teamSize]
   );
 
   const cliSummary = useMemo(() => {
@@ -524,10 +545,12 @@ export function App() {
   }, [bridgeEvents]);
 
   const fallbackTodoItems = useMemo(() => {
-    const hasReviewer = roles.some((role) => role.key === "reviewer" || role.key === "plannerReviewer");
-    const plannerCli = assignments.planner ?? assignments.plannerReviewer ?? "codex";
-    const executorCli = assignments.executor ?? "claudecode";
-    const reviewerCli = assignments.reviewer ?? assignments.plannerReviewer ?? "mimocode";
+    const hasReviewer = roles.some((role) =>
+      role.key === "solo" || role.key === "reviewer" || role.key === "plannerReviewer"
+    );
+    const plannerCli = assignments.solo ?? assignments.planner ?? assignments.plannerReviewer ?? "codex";
+    const executorCli = assignments.solo ?? assignments.executor ?? "claudecode";
+    const reviewerCli = assignments.solo ?? assignments.reviewer ?? assignments.plannerReviewer ?? "mimocode";
     const teamCreated = Boolean(activeChat?.teamCreated);
     const taskAssigned = hasBridgeEvent(bridgeEvents, "task.assigned");
     const taskCompleted = hasBridgeEvent(bridgeEvents, "task.completed");
@@ -605,12 +628,14 @@ export function App() {
     setActiveProjectId(project.id);
     setActiveChatId(project.chats[0]?.id ?? "");
     setOpenMenuProjectId(null);
+    setOpenMenuChatKey(null);
   }
 
   function selectChat(projectId: string, chatId: string) {
     setActiveProjectId(projectId);
     setActiveChatId(chatId);
     setOpenMenuProjectId(null);
+    setOpenMenuChatKey(null);
   }
 
   async function addProject() {
@@ -636,6 +661,7 @@ export function App() {
     setActiveProjectId(project.id);
     setActiveChatId(chatId);
     setOpenMenuProjectId(null);
+    setOpenMenuChatKey(null);
     announce(`已导入 ${project.name}`);
   }
 
@@ -659,6 +685,7 @@ export function App() {
     setActiveProjectId(projectId);
     setActiveChatId(chat.id);
     setOpenMenuProjectId(null);
+    setOpenMenuChatKey(null);
     setNextChatNumber((value) => value + 1);
     announce("新对话已创建");
   }
@@ -680,6 +707,7 @@ export function App() {
       )
     );
     setOpenMenuProjectId(null);
+    setOpenMenuChatKey(null);
     announce("项目已重命名");
   }
 
@@ -690,12 +718,14 @@ export function App() {
       return [project, ...current.filter((item) => item.id !== projectId)];
     });
     setOpenMenuProjectId(null);
+    setOpenMenuChatKey(null);
     announce("项目已置顶");
   }
 
   async function showProjectInFolder(projectId: string) {
     const shown = await window.agentTeam?.showWorkspaceInFolder(projectId);
     setOpenMenuProjectId(null);
+    setOpenMenuChatKey(null);
     announce(shown ? "已打开项目位置" : "项目位置不可用");
   }
 
@@ -714,7 +744,56 @@ export function App() {
     setActiveChatId(nextProject.chats[0]?.id ?? "");
     void window.agentTeam?.removeWorkspace(projectId);
     setOpenMenuProjectId(null);
+    setOpenMenuChatKey(null);
     announce("项目已移除");
+  }
+
+  function chatMenuKey(projectId: string, chatId: string) {
+    return `${projectId}:${chatId}`;
+  }
+
+  function renameChat(projectId: string, chatId: string) {
+    const project = projects.find((item) => item.id === projectId);
+    const chat = project?.chats.find((item) => item.id === chatId);
+    const nextName = window.prompt("重命名对话", chat?.title ?? "");
+    const trimmed = nextName?.trim();
+    if (!trimmed) {
+      setOpenMenuChatKey(null);
+      return;
+    }
+
+    setProjects((current) =>
+      current.map((project) =>
+        project.id === projectId
+          ? {
+              ...project,
+              chats: project.chats.map((chat) => chat.id === chatId ? { ...chat, title: trimmed } : chat)
+            }
+          : project
+      )
+    );
+    setOpenMenuChatKey(null);
+    announce("对话已重命名");
+  }
+
+  function removeChat(projectId: string, chatId: string) {
+    const project = projects.find((item) => item.id === projectId);
+    if (!project || project.chats.length <= 1) {
+      setOpenMenuChatKey(null);
+      announce("至少保留一个对话");
+      return;
+    }
+
+    const nextChats = project.chats.filter((chat) => chat.id !== chatId);
+    const nextChat = nextChats[0];
+    setProjects((current) =>
+      current.map((project) => project.id === projectId ? { ...project, chats: nextChats } : project)
+    );
+    if (activeProjectId === projectId && activeChatId === chatId) {
+      setActiveChatId(nextChat?.id ?? "");
+    }
+    setOpenMenuChatKey(null);
+    announce("对话已移除");
   }
 
   function changeTeamSize(size: TeamSize) {
@@ -760,6 +839,7 @@ export function App() {
           agentId: agentIdFor(agent, activeChat.id),
           bridgeAgentId: bridgeAgentIdFor(agent),
           role: processRole(agent),
+          ...(agent.promptProfile ? { promptProfile: agent.promptProfile } : {}),
           ...(activeProject?.path ? { workspaceId: activeProject.id } : {})
         };
         return api.startAgent({ ...baseInput, cli: agent.cli });
@@ -831,7 +911,10 @@ export function App() {
                     type="button"
                     aria-label="项目菜单"
                     onClick={() =>
-                      setOpenMenuProjectId((current) => (current === project.id ? null : project.id))
+                      setOpenMenuProjectId((current) => {
+                        setOpenMenuChatKey(null);
+                        return current === project.id ? null : project.id;
+                      })
                     }
                   >
                     <Icon name="more" />
@@ -864,15 +947,39 @@ export function App() {
 
                   <div className="chat-list">
                     {project.chats.map((chat) => (
-                      <button
-                        className={`chat-row ${chat.id === activeChat?.id ? "active" : ""}`}
-                        type="button"
-                        key={chat.id}
-                        onClick={() => selectChat(project.id, chat.id)}
-                      >
-                        <strong>{chat.title}</strong>
-                        <time>{chat.time}</time>
-                      </button>
+                      <div className="chat-item" key={chat.id}>
+                        <button
+                          className={`chat-row ${chat.id === activeChat?.id ? "active" : ""}`}
+                          type="button"
+                          onClick={() => selectChat(project.id, chat.id)}
+                        >
+                          <strong>{chat.title}</strong>
+                          <time>{chat.time}</time>
+                        </button>
+                        <button
+                          className="icon-button chat-menu-trigger"
+                          type="button"
+                          aria-label="对话菜单"
+                          onClick={() => {
+                            setOpenMenuProjectId(null);
+                            setOpenMenuChatKey((current) =>
+                              current === chatMenuKey(project.id, chat.id) ? null : chatMenuKey(project.id, chat.id)
+                            );
+                          }}
+                        >
+                          <Icon name="more" />
+                        </button>
+                        {openMenuChatKey === chatMenuKey(project.id, chat.id) ? (
+                          <div className="chat-menu">
+                            <button type="button" onClick={() => renameChat(project.id, chat.id)}>
+                              重命名对话
+                            </button>
+                            <button type="button" onClick={() => removeChat(project.id, chat.id)}>
+                              移除对话
+                            </button>
+                          </div>
+                        ) : null}
+                      </div>
                     ))}
                   </div>
                 </section>
@@ -916,7 +1023,7 @@ export function App() {
                   <article className={`agent-window ${index === 0 ? "first" : ""}`} key={`${activeChat?.id}-${agent.key}-${agent.cli}`}>
                     <header className="window-head">
                       <div className="agent-title">
-                        <span className="cli-name">{agent.cli}</span>
+                        <span className="cli-name">{cliDetections[agent.cli].label}</span>
                         <span className={`role ${agent.roleClass}`}>{agent.label}</span>
                       </div>
                       <div className="window-actions">

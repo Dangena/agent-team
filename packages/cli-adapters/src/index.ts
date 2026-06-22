@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { accessSync, constants, existsSync, statSync } from "node:fs";
 import { delimiter, dirname, extname, isAbsolute, join, normalize } from "node:path";
-import { buildRolePrompt, type AgentRole } from "@agent-team/agent-team-core";
+import { buildRolePrompt, type AgentRole, type RolePromptProfile } from "@agent-team/agent-team-core";
 
 export type BuiltInCliAdapterId = "codex" | "claudecode" | "opencode" | "mimocode" | "zcode";
 export type CliAdapterId = BuiltInCliAdapterId | "generic";
@@ -32,6 +32,7 @@ export type DetectionOptions = {
 export type LaunchContext = {
   workspacePath: string;
   role: AgentRole;
+  promptProfile?: RolePromptProfile;
   bridgeEnv: Record<string, string>;
 };
 
@@ -40,6 +41,7 @@ export type LaunchSpec = {
   args: string[];
   env: Record<string, string>;
   cwd: string;
+  initialInput?: string;
 };
 
 export type CliAdapter = {
@@ -259,9 +261,18 @@ function configuredExecutableMap(
   return executable ? { [id]: executable } : {};
 }
 
-function launchArgsFor(id: BuiltInCliAdapterId, role: AgentRole): string[] {
+function launchArgsFor(id: BuiltInCliAdapterId, role: AgentRole, profile?: RolePromptProfile): string[] {
   if (id === "mimocode") return [];
-  return [buildRolePrompt(role)];
+  return [buildRolePrompt(role, profile)];
+}
+
+function launchInitialInputFor(
+  id: BuiltInCliAdapterId,
+  role: AgentRole,
+  profile?: RolePromptProfile
+): string | undefined {
+  if (id !== "mimocode") return undefined;
+  return `${buildRolePrompt(role, profile)}\r`;
 }
 
 export function createBuiltInAdapter(
@@ -289,12 +300,14 @@ export function createBuiltInAdapter(
         throw new Error(`${definition.displayName} is not available: ${detection.reason ?? "missing executable"}`);
       }
 
-      return {
+      const launchSpec: LaunchSpec = {
         executable: detection.executable,
-        args: launchArgsFor(id, context.role),
+        args: launchArgsFor(id, context.role, context.promptProfile),
         env: context.bridgeEnv,
         cwd: context.workspacePath
       };
+      const initialInput = launchInitialInputFor(id, context.role, context.promptProfile);
+      return initialInput ? { ...launchSpec, initialInput } : launchSpec;
     }
   };
 }

@@ -40,6 +40,7 @@ const processManager = createAgentPtyManager((event) => {
 export type StartFakeAgentInput = {
   agentId: string;
   bridgeAgentId?: string;
+  promptProfile?: "standard" | "solo" | "plannerReviewer";
   role: "planner" | "executor" | "reviewer";
   workspaceId?: string;
 };
@@ -243,15 +244,22 @@ function registerIpcHandlers() {
     const launch = await adapter.buildLaunchSpec({
       workspacePath,
       role: input.role,
+      ...(input.promptProfile ? { promptProfile: input.promptProfile } : {}),
       bridgeEnv: bridgeEnvironment(input)
     });
-    return processManager.start({
+    const snapshot = processManager.start({
       agentId: input.agentId,
       executable: launch.executable,
       args: launch.args,
       cwd: launch.cwd,
       env: launch.env
     });
+    if (launch.initialInput) {
+      setTimeout(() => {
+        processManager.write(input.agentId, launch.initialInput ?? "");
+      }, 1_200);
+    }
+    return snapshot;
   });
   ipcMain.handle("agent-team:stop-agent", (event, agentId: string) => {
     assertTrustedIpcSender(event);
