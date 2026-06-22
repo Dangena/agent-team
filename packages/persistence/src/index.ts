@@ -29,6 +29,12 @@ export type PersistedEvent = {
   createdAt: string;
 };
 
+export type AppStateRecord<TValue = unknown> = {
+  key: string;
+  value: TValue;
+  updatedAt: string;
+};
+
 export type DesktopRepository = {
   close(): void;
   listWorkspaces(): WorkspaceRecord[];
@@ -38,6 +44,8 @@ export type DesktopRepository = {
   saveSession(session: SessionRecord): SessionRecord;
   appendEvent(event: PersistedEvent): boolean;
   listEvents(sessionId: string): PersistedEvent[];
+  getAppState<TValue = unknown>(key: string): AppStateRecord<TValue> | null;
+  saveAppState<TValue = unknown>(state: AppStateRecord<TValue>): AppStateRecord<TValue>;
 };
 
 export function createDesktopRepository(databasePath: string): DesktopRepository {
@@ -88,6 +96,11 @@ export function createDesktopRepository(databasePath: string): DesktopRepository
       actor TEXT NOT NULL,
       detail_json TEXT NOT NULL,
       created_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS app_state (
+      key TEXT PRIMARY KEY,
+      value_json TEXT NOT NULL,
+      updated_at TEXT NOT NULL
     );
   `);
 
@@ -168,6 +181,27 @@ export function createDesktopRepository(databasePath: string): DesktopRepository
         payload: JSON.parse(String(row.payload_json)) as unknown,
         createdAt: String(row.created_at)
       }));
+    },
+    getAppState(key) {
+      const row = database.prepare(`
+        SELECT key, value_json, updated_at FROM app_state WHERE key = ?
+      `).get(key) as Record<string, unknown> | undefined;
+      if (!row) return null;
+      return {
+        key: String(row.key),
+        value: JSON.parse(String(row.value_json)),
+        updatedAt: String(row.updated_at)
+      };
+    },
+    saveAppState(state) {
+      database.prepare(`
+        INSERT INTO app_state (key, value_json, updated_at)
+        VALUES (?, ?, ?)
+        ON CONFLICT(key) DO UPDATE SET
+          value_json = excluded.value_json,
+          updated_at = excluded.updated_at
+      `).run(state.key, JSON.stringify(state.value), state.updatedAt);
+      return state;
     }
   };
 }

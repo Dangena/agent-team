@@ -4,6 +4,7 @@ import type {
   AgentPtyEvent as AgentProcessEvent,
   AgentPtySnapshot as AgentProcessSnapshot
 } from "@agent-team/agent-host";
+import type { WorkspaceRecord } from "@agent-team/persistence";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 
@@ -76,6 +77,21 @@ type TodoDisplayItem = {
   detail: string;
 };
 
+type PersistedRendererState = {
+  version: 1;
+  projects: Project[];
+  activeProjectId: string;
+  activeChatId: string;
+  teamSize: TeamSize;
+  assignments: Assignments;
+  nextChatNumber: number;
+  configCollapsed: boolean;
+};
+
+type AgentProcessSnapshotWithOutput = AgentProcessSnapshot & {
+  output?: string;
+};
+
 const roleSets: Record<TeamSize, RoleSpec[]> = {
   1: [
     {
@@ -132,6 +148,59 @@ function activeFrom(projects: Project[], projectId: string, chatId: string) {
   const project = projects.find((item) => item.id === projectId) ?? projects[0];
   const chat = project?.chats.find((item) => item.id === chatId) ?? project?.chats[0];
   return { project, chat };
+}
+
+function projectFromWorkspace(workspace: WorkspaceRecord, index: number): Project {
+  return {
+    id: workspace.id,
+    name: workspace.name,
+    branch: workspace.branch ?? "no git",
+    status: workspace.available ? (workspace.dirty ? "dirty" : "clean") : "missing",
+    path: workspace.path,
+    available: workspace.available,
+    chats: [{
+      id: `session-${workspace.id}`,
+      title: index === 0 ? "恢复的工作区会话" : "工作区会话",
+      time: "最近",
+      teamCreated: false,
+      windows: []
+    }]
+  };
+}
+
+function hydrateProjects(savedProjects: Project[], workspaces: WorkspaceRecord[]) {
+  const workspaceById = new Map(workspaces.map((workspace) => [workspace.id, workspace]));
+  const hydrated = savedProjects.map((project) => {
+    const workspace = workspaceById.get(project.id);
+    if (!workspace) return project;
+    return {
+      ...project,
+      name: workspace.name,
+      branch: workspace.branch ?? "no git",
+      status: workspace.available ? (workspace.dirty ? "dirty" : "clean") : "missing",
+      path: workspace.path,
+      available: workspace.available
+    };
+  });
+  const savedIds = new Set(savedProjects.map((project) => project.id));
+  return [
+    ...hydrated,
+    ...workspaces
+      .filter((workspace) => !savedIds.has(workspace.id))
+      .map((workspace, index) => projectFromWorkspace(workspace, savedProjects.length + index))
+  ];
+}
+
+function isPersistedRendererState(value: unknown): value is PersistedRendererState {
+  const state = value && typeof value === "object" ? value as Partial<PersistedRendererState> : null;
+  return Boolean(
+    state &&
+    state.version === 1 &&
+    Array.isArray(state.projects) &&
+    (state.teamSize === 1 || state.teamSize === 2 || state.teamSize === 3) &&
+    typeof state.activeProjectId === "string" &&
+    typeof state.activeChatId === "string"
+  );
 }
 
 function createWindowsFrom(size: TeamSize, assignments: Assignments): AgentWindow[] {
@@ -382,6 +451,7 @@ export function App() {
   const [agentOutput, setAgentOutput] = useState<Record<string, string>>({});
   const [activeAgents, setActiveAgents] = useState<Record<string, boolean>>({});
   const activityTimersRef = useRef<Record<string, number>>({});
+  const restoredStateRef = useRef(false);
   const [runtimeBridgeEvents, setRuntimeBridgeEvents] = useState<BridgeUiEvent[]>([]);
   const { project: activeProject, chat: activeChat } = activeFrom(projects, activeProjectId, activeChatId);
   const roles = roleSets[teamSize];
@@ -422,28 +492,61 @@ export function App() {
   }, [activeChat?.teamCreated]);
 
   useEffect(() => {
-    void window.agentTeam?.listWorkspaces().then((workspaces) => {
-      if (!workspaces.length) return;
-      const restored = workspaces.map((workspace, index): Project => ({
-        id: workspace.id,
-        name: workspace.name,
-        branch: workspace.branch ?? "no git",
-        status: workspace.available ? (workspace.dirty ? "dirty" : "clean") : "missing",
-        path: workspace.path,
-        available: workspace.available,
-        chats: [{
-          id: `session-${workspace.id}`,
-          title: index === 0 ? "恢复的工作区会话" : "工作区会话",
-          time: "最近",
-          teamCreated: false,
-          windows: []
-        }]
-      }));
-      setProjects(restored);
-      setActiveProjectId(restored[0]?.id ?? "");
-      setActiveChatId(restored[0]?.chats[0]?.id ?? "");
+    const api = window.agentTeam;
+    if (!api) {
+      restoredStateRef.current = true;
+      return;
+    }
+
+    void Promise.all([api.getDesktopState(), api.listWorkspaces()]).then(([saved, workspaces]) => {
+      const savedValue = saved?.value;
+      if (isPersistedRendererState(savedValue)) {
+        const restored = hydrateProjects(savedValue.projects, workspaces);
+        setProjects(restored);
+        setActiveProjectId(
+          restored.some((project) => project.id === savedValue.activeProjectId)
+            ? savedValue.activeProjectId
+            : restored[0]?.id ?? ""
+        );
+        const activeProject = restored.find((project) => project.id === savedValue.activeProjectId) ?? restored[0];
+        setActiveChatId(
+          activeProject?.chats.some((chat) => chat.id === savedValue.activeChatId)
+            ? savedValue.activeChatId
+            : activeProject?.chats[0]?.id ?? ""
+        );
+        setTeamSize(savedValue.teamSize);
+        setAssignments({ ...initialAssignments, ...savedValue.assignments });
+        setNextChatNumber(Math.max(2, savedValue.nextChatNumber || 2));
+        setConfigCollapsed(savedValue.configCollapsed);
+      } else if (workspaces.length) {
+        const restored = workspaces.map(projectFromWorkspace);
+        setProjects(restored);
+        setActiveProjectId(restored[0]?.id ?? "");
+        setActiveChatId(restored[0]?.chats[0]?.id ?? "");
+      }
+      restoredStateRef.current = true;
     });
   }, []);
+
+  useEffect(() => {
+    if (!restoredStateRef.current) return;
+    const api = window.agentTeam;
+    if (!api) return;
+    const timer = window.setTimeout(() => {
+      const state: PersistedRendererState = {
+        version: 1,
+        projects,
+        activeProjectId,
+        activeChatId,
+        teamSize,
+        assignments,
+        nextChatNumber,
+        configCollapsed
+      };
+      void api.saveDesktopState(state);
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [activeChatId, activeProjectId, assignments, configCollapsed, nextChatNumber, projects, teamSize]);
 
   useEffect(() => {
     if (!toast) return;
@@ -457,6 +560,11 @@ export function App() {
 
     void api.listAgentProcesses().then((processes) => {
       setAgentProcesses(Object.fromEntries(processes.map((process) => [process.agentId, process])));
+      setAgentOutput(Object.fromEntries(processes
+        .map((process) => process as AgentProcessSnapshotWithOutput)
+        .filter((process) => process.output)
+        .map((process) => [process.agentId, process.output ?? ""])
+      ));
     });
     return api.onAgentProcessEvent((event: AgentProcessEvent) => {
       setAgentProcesses((current) => ({ ...current, [event.agentId]: event }));

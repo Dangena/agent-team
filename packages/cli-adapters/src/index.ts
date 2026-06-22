@@ -42,6 +42,7 @@ export type LaunchSpec = {
   env: Record<string, string>;
   cwd: string;
   initialInput?: string;
+  initialInputDelayMs?: number;
 };
 
 export type CliAdapter = {
@@ -262,7 +263,7 @@ function configuredExecutableMap(
 }
 
 function launchArgsFor(id: BuiltInCliAdapterId, role: AgentRole, profile?: RolePromptProfile): string[] {
-  if (id === "mimocode") return [];
+  if (id === "mimocode" || id === "opencode") return [];
   return [buildRolePrompt(role, profile)];
 }
 
@@ -271,8 +272,14 @@ function launchInitialInputFor(
   role: AgentRole,
   profile?: RolePromptProfile
 ): string | undefined {
-  if (id !== "mimocode") return undefined;
+  if (id !== "mimocode" && id !== "opencode") return undefined;
   return `${buildRolePrompt(role, profile)}\r`;
+}
+
+function launchInitialInputDelayFor(id: BuiltInCliAdapterId): number | undefined {
+  if (id === "mimocode") return 3_000;
+  if (id === "opencode") return 1_500;
+  return undefined;
 }
 
 export function createBuiltInAdapter(
@@ -307,7 +314,11 @@ export function createBuiltInAdapter(
         cwd: context.workspacePath
       };
       const initialInput = launchInitialInputFor(id, context.role, context.promptProfile);
-      return initialInput ? { ...launchSpec, initialInput } : launchSpec;
+      if (!initialInput) return launchSpec;
+      const initialInputDelayMs = launchInitialInputDelayFor(id);
+      return initialInputDelayMs
+        ? { ...launchSpec, initialInput, initialInputDelayMs }
+        : { ...launchSpec, initialInput };
     }
   };
 }

@@ -10,8 +10,16 @@ import type { BridgeUiEvent } from "@agent-team/protocol";
 import type { DetectionResult } from "@agent-team/cli-adapters";
 import type { WorkspaceRecord } from "@agent-team/persistence";
 
+export type DesktopStateRecord = {
+  key: string;
+  value: unknown;
+  updatedAt: string;
+};
+
 export type AgentTeamApi = {
   getBootstrap(): Promise<DesktopBootstrap>;
+  getDesktopState(): Promise<DesktopStateRecord | null>;
+  saveDesktopState(value: unknown): Promise<DesktopStateRecord>;
   listCliAdapters(): Promise<DetectionResult[]>;
   listWorkspaces(): Promise<WorkspaceRecord[]>;
   importWorkspace(): Promise<WorkspaceRecord | null>;
@@ -39,6 +47,12 @@ export const api: AgentTeamApi = {
   },
   listCliAdapters() {
     return ipcRenderer.invoke("agent-team:list-cli-adapters");
+  },
+  getDesktopState() {
+    return ipcRenderer.invoke("agent-team:get-desktop-state");
+  },
+  saveDesktopState(value) {
+    return ipcRenderer.invoke("agent-team:save-desktop-state", value);
   },
   listWorkspaces() {
     return ipcRenderer.invoke("agent-team:list-workspaces");

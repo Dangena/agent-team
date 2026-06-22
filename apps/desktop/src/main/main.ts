@@ -31,7 +31,11 @@ const bridgeToken = randomUUID();
 let bridgeRuntime: BridgeRuntime | null = null;
 let bridgeServer: BridgeTransportServer | null = null;
 let cachedCliEnvironment: NodeJS.ProcessEnv | null = null;
+const agentOutputBuffers = new Map<string, string>();
 const processManager = createAgentPtyManager((event) => {
+  if (event.type === "output" && event.data) {
+    agentOutputBuffers.set(event.agentId, `${agentOutputBuffers.get(event.agentId) ?? ""}${event.data}`.slice(-100_000));
+  }
   for (const window of BrowserWindow.getAllWindows()) {
     window.webContents.send("agent-team:agent-process-event", event);
   }
@@ -46,7 +50,7 @@ export type StartFakeAgentInput = {
 };
 export type StartAgentInput = StartFakeAgentInput & { cli: BuiltInCliAdapterId };
 export type AgentProcessEvent = AgentPtyEvent;
-export type AgentProcessSnapshot = AgentPtySnapshot;
+export type AgentProcessSnapshot = AgentPtySnapshot & { output?: string };
 
 export type DesktopBootstrap = {
   platformId: string;
@@ -160,6 +164,18 @@ function assertTrustedIpcSender(event: IpcMainInvokeEvent) {
 function registerIpcHandlers() {
   ipcMain.handle("agent-team:get-bootstrap", () => createDesktopBootstrap());
   ipcMain.handle("agent-team:list-cli-adapters", () => listDesktopCliAdapters());
+  ipcMain.handle("agent-team:get-desktop-state", (event) => {
+    assertTrustedIpcSender(event);
+    return getRepository().getAppState("renderer");
+  });
+  ipcMain.handle("agent-team:save-desktop-state", (event, value: unknown) => {
+    assertTrustedIpcSender(event);
+    return getRepository().saveAppState({
+      key: "renderer",
+      value,
+      updatedAt: new Date().toISOString()
+    });
+  });
   ipcMain.handle("agent-team:list-bridge-ui-events", (_event, sessionId: string) => {
     if (!bridgeRuntime) return [];
     const events = bridgeRuntime.listEvents().filter((event) => event.sessionId === sessionId);
@@ -221,6 +237,7 @@ function registerIpcHandlers() {
       const args = process.platform === "win32"
         ? [fakeScript, "--role", input.role]
         : ["node", fakeScript, "--role", input.role];
+      agentOutputBuffers.delete(input.agentId);
       return processManager.start({
         agentId: input.agentId,
         executable,
@@ -247,6 +264,7 @@ function registerIpcHandlers() {
       ...(input.promptProfile ? { promptProfile: input.promptProfile } : {}),
       bridgeEnv: bridgeEnvironment(input)
     });
+    agentOutputBuffers.delete(input.agentId);
     const snapshot = processManager.start({
       agentId: input.agentId,
       executable: launch.executable,
@@ -257,7 +275,7 @@ function registerIpcHandlers() {
     if (launch.initialInput) {
       setTimeout(() => {
         processManager.write(input.agentId, launch.initialInput ?? "");
-      }, 1_200);
+      }, launch.initialInputDelayMs ?? 1_200);
     }
     return snapshot;
   });
@@ -265,7 +283,12 @@ function registerIpcHandlers() {
     assertTrustedIpcSender(event);
     return processManager.stop(agentId);
   });
-  ipcMain.handle("agent-team:list-agent-processes", (): AgentProcessSnapshot[] => processManager.list());
+  ipcMain.handle("agent-team:list-agent-processes", (): AgentProcessSnapshot[] =>
+    processManager.list().map((snapshot) => {
+      const output = agentOutputBuffers.get(snapshot.agentId);
+      return output ? { ...snapshot, output } : snapshot;
+    })
+  );
   ipcMain.handle("agent-team:write-terminal", (event, agentId: string, data: string) => {
     assertTrustedIpcSender(event);
     if (data.length > 64 * 1024) throw new Error("terminal input exceeds 64 KiB");
@@ -322,7 +345,6 @@ app.whenReady().then(async () => {
 });
 
 app.on("window-all-closed", () => {
-  processManager.stopAll();
   if (process.platform !== "darwin") app.quit();
 });
 
