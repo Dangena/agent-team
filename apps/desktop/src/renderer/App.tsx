@@ -51,6 +51,7 @@ type Chat = {
   title: string;
   time: string;
   teamCreated: boolean;
+  windows: AgentWindow[];
 };
 
 type Project = {
@@ -143,8 +144,21 @@ function terminalRole(role: RoleSpec) {
   return role.key === "plannerReviewer" ? "planner+reviewer" : role.key;
 }
 
-function agentIdFor(role: RoleSpec) {
-  return `preview-${role.key.toLowerCase()}`;
+function compactHash(value: string) {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(36);
+}
+
+function agentIdFor(role: RoleSpec, chatId: string) {
+  return `preview-${compactHash(chatId)}-${processRole(role)}`;
+}
+
+function bridgeAgentIdFor(role: RoleSpec) {
+  return `preview-${processRole(role)}`;
 }
 
 function processRole(role: RoleSpec): "planner" | "executor" | "reviewer" {
@@ -311,10 +325,10 @@ export function App() {
   const [projects, setProjects] = useState<Project[]>(initialProjects);
   const [activeProjectId, setActiveProjectId] = useState("");
   const [activeChatId, setActiveChatId] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
   const [openMenuProjectId, setOpenMenuProjectId] = useState<string | null>(null);
   const [nextChatNumber, setNextChatNumber] = useState(2);
   const [toast, setToast] = useState("");
-  const [windows, setWindows] = useState<AgentWindow[]>([]);
   const [agentProcesses, setAgentProcesses] = useState<Record<string, AgentProcessSnapshot>>({});
   const [agentOutput, setAgentOutput] = useState<Record<string, string>>({});
   const [activeAgents, setActiveAgents] = useState<Record<string, boolean>>({});
@@ -322,6 +336,7 @@ export function App() {
   const [runtimeBridgeEvents, setRuntimeBridgeEvents] = useState<BridgeUiEvent[]>([]);
   const { project: activeProject, chat: activeChat } = activeFrom(projects, activeProjectId, activeChatId);
   const roles = roleSets[teamSize];
+  const activeWindows = activeChat?.windows ?? [];
 
   useEffect(() => {
     void window.agentTeam?.listCliAdapters().then((detections) => {
@@ -369,7 +384,8 @@ export function App() {
           id: `session-${workspace.id}`,
           title: index === 0 ? "恢复的工作区会话" : "工作区会话",
           time: "最近",
-          teamCreated: false
+          teamCreated: false,
+          windows: []
         }]
       }));
       setProjects(restored);
@@ -428,6 +444,21 @@ export function App() {
     [activeChat?.teamCreated, runtimeBridgeEvents]
   );
 
+  const filteredProjects = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) return projects;
+    return projects
+      .map((project) => {
+        const projectMatch = [project.name, project.branch, project.status, project.path ?? ""]
+          .some((value) => value.toLowerCase().includes(query));
+        const chats = projectMatch
+          ? project.chats
+          : project.chats.filter((chat) => `${chat.title} ${chat.time}`.toLowerCase().includes(query));
+        return chats.length ? { ...project, chats } : null;
+      })
+      .filter((project): project is Project => Boolean(project));
+  }, [projects, searchQuery]);
+
   const todoItems = useMemo(() => {
     const hasReviewer = roles.some((role) => role.key === "reviewer" || role.key === "plannerReviewer");
     const plannerCli = assignments.planner ?? assignments.plannerReviewer ?? "codex";
@@ -451,7 +482,7 @@ export function App() {
         state: teamCreated ? "done" : "active",
         label: teamCreated ? "done" : "next",
         title: "生成 Agent 窗口",
-        detail: teamCreated ? `${teamSize} 个窗口已连接 smux-bridge` : "等待创建当前对话的 Agent 窗口"
+        detail: teamCreated ? `${activeWindows.length || teamSize} 个窗口已连接 smux-bridge` : "等待创建当前对话的 Agent 窗口"
       },
       {
         state: taskAssigned ? "done" : teamCreated ? "active" : "waiting",
@@ -520,7 +551,13 @@ export function App() {
       status: workspace.dirty ? "dirty" : "clean",
       path: workspace.path,
       available: workspace.available,
-      chats: [{ id: chatId, title: "新工作区会话", time: "刚刚", teamCreated: false }]
+      chats: [{
+        id: chatId,
+        title: "新工作区会话",
+        time: "刚刚",
+        teamCreated: false,
+        windows: []
+      }]
     };
     setProjects((current) => [project, ...current.filter((item) => item.id !== project.id)]);
     setActiveProjectId(project.id);
@@ -537,7 +574,8 @@ export function App() {
       id: `c${chatNumber}`,
       title: `新对话 ${chatNumber}`,
       time: "刚刚",
-      teamCreated: false
+      teamCreated: false,
+      windows: []
     };
 
     setProjects((current) =>
@@ -591,6 +629,10 @@ export function App() {
       announce("请先添加项目工作区");
       return;
     }
+    if (!activeChat) {
+      announce("请先选择一个对话");
+      return;
+    }
     const nextWindows = createWindowsFrom(teamSize, assignments);
     const api = window.agentTeam;
     if (!api) {
@@ -604,12 +646,22 @@ export function App() {
       return;
     }
 
-    setAgentOutput({});
-    setActiveAgents({});
+    const startedAgentIds = nextWindows.map((agent) => agentIdFor(agent, activeChat.id));
+    setAgentOutput((current) => {
+      const next = { ...current };
+      for (const agentId of startedAgentIds) delete next[agentId];
+      return next;
+    });
+    setActiveAgents((current) => {
+      const next = { ...current };
+      for (const agentId of startedAgentIds) delete next[agentId];
+      return next;
+    });
     const results = await Promise.allSettled(
       nextWindows.map((agent) => {
         const baseInput = {
-          agentId: agentIdFor(agent),
+          agentId: agentIdFor(agent, activeChat.id),
+          bridgeAgentId: bridgeAgentIdFor(agent),
           role: processRole(agent),
           ...(activeProject?.path ? { workspaceId: activeProject.id } : {})
         };
@@ -618,10 +670,11 @@ export function App() {
     );
     const failed = results.filter((result) => result.status === "rejected");
     const startedWindows = nextWindows.filter((_agent, index) => results[index]?.status === "fulfilled");
-    setWindows(startedWindows);
     if (startedWindows.length && activeChat) {
       setProjects((current) => current.map((project) => project.id === activeProject?.id
-        ? { ...project, chats: project.chats.map((chat) => chat.id === activeChat.id ? { ...chat, teamCreated: true } : chat) }
+        ? { ...project, chats: project.chats.map((chat) => chat.id === activeChat.id
+          ? { ...chat, teamCreated: true, windows: startedWindows }
+          : chat) }
         : project));
       setConfigCollapsed(true);
     }
@@ -633,7 +686,8 @@ export function App() {
   }
 
   function stopAgent(agent: AgentWindow) {
-    void window.agentTeam?.stopAgent(agentIdFor(agent));
+    if (!activeChat) return;
+    void window.agentTeam?.stopAgent(agentIdFor(agent, activeChat.id));
   }
 
   return (
@@ -644,24 +698,21 @@ export function App() {
           <div>
             <div className="window-chrome" aria-hidden="true" />
 
-            <nav className="rail-actions">
-              <button className="rail-action primary-action" type="button" onClick={() => addChat()}>
-                <Icon name="edit" />
-                <span>新对话</span>
-              </button>
-              <button className="rail-action" type="button" onClick={() => announce("搜索面板已打开")}>
+            <div className="rail-actions">
+              <label className="rail-search">
                 <Icon name="search" />
-                <span>搜索</span>
-              </button>
-              <button className="rail-action" type="button" onClick={() => announce("CLI 管理已打开")}>
-                <Icon name="terminal" />
-                <span>CLI 管理</span>
-              </button>
+                <input
+                  aria-label="搜索项目和对话"
+                  placeholder="搜索项目、会话"
+                  value={searchQuery}
+                  onChange={(event) => setSearchQuery(event.target.value)}
+                />
+              </label>
               <button className="rail-action" type="button" onClick={addProject}>
                 <Icon name="plus" />
                 <span>添加项目</span>
               </button>
-            </nav>
+            </div>
           </div>
 
           <div className="project-zone">
@@ -669,7 +720,7 @@ export function App() {
               <span>项目</span>
             </div>
             <div className="projects-list">
-              {projects.map((project) => (
+              {filteredProjects.map((project) => (
                 <section
                   className={`project-card ${project.id === activeProject?.id ? "active" : ""}`}
                   key={project.id}
@@ -732,6 +783,9 @@ export function App() {
                   ) : null}
                 </section>
               ))}
+              {!filteredProjects.length ? (
+                <div className="empty-filter">没有匹配的项目或会话</div>
+              ) : null}
             </div>
           </div>
 
@@ -753,19 +807,19 @@ export function App() {
 
           <section className="workspace">
             <section className="canvas" aria-label="Agent 窗口">
-              {windows.length ? <section
+              {activeWindows.length ? <section
                 className={`terminal-grid ${
-                  windows.length === 1 ? "one" : windows.length === 2 ? "two" : "three"
+                  activeWindows.length === 1 ? "one" : activeWindows.length === 2 ? "two" : "three"
                 }`}
               >
-                {windows.map((agent, index) => {
-                  const agentId = agentIdFor(agent);
+                {activeWindows.map((agent, index) => {
+                  const agentId = activeChat ? agentIdFor(agent, activeChat.id) : bridgeAgentIdFor(agent);
                   const process = agentProcesses[agentId];
                   const output = agentOutput[agentId] ?? "";
                   const running = process?.status === "running";
                   const status = processStatus(process?.status, activeAgents[agentId]);
                   return (
-                  <article className={`agent-window ${index === 0 ? "first" : ""}`} key={`${agent.key}-${agent.cli}`}>
+                  <article className={`agent-window ${index === 0 ? "first" : ""}`} key={`${activeChat?.id}-${agent.key}-${agent.cli}`}>
                     <header className="window-head">
                       <div className="agent-title">
                         <span className="cli-name">{agent.cli}</span>

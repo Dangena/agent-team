@@ -39,6 +39,7 @@ const processManager = createAgentPtyManager((event) => {
 
 export type StartFakeAgentInput = {
   agentId: string;
+  bridgeAgentId?: string;
   role: "planner" | "executor" | "reviewer";
   workspaceId?: string;
 };
@@ -134,7 +135,7 @@ function selectedWorkspacePath(workspaceId?: string): string {
 function bridgeEnvironment(input: StartFakeAgentInput): Record<string, string> {
   if (!bridgeServer) throw new Error("bridge server is not ready");
   return {
-    AGENT_TEAM_AGENT_ID: input.agentId,
+    AGENT_TEAM_AGENT_ID: input.bridgeAgentId ?? input.agentId,
     AGENT_TEAM_ROLE: input.role,
     AGENT_TEAM_SESSION_ID: "ses_desktop_preview",
     AGENT_TEAM_TOKEN: bridgeToken,
@@ -196,6 +197,9 @@ function registerIpcHandlers() {
       if (!/^[a-z][a-z0-9_-]{0,63}$/i.test(input.agentId)) {
         throw new Error("invalid agent id");
       }
+      if (input.bridgeAgentId && !/^[a-z][a-z0-9_-]{0,63}$/i.test(input.bridgeAgentId)) {
+        throw new Error("invalid bridge agent id");
+      }
       if (!["planner", "executor", "reviewer"].includes(input.role)) {
         throw new Error("invalid agent role");
       }
@@ -224,6 +228,9 @@ function registerIpcHandlers() {
   ipcMain.handle("agent-team:start-agent", async (event, input: StartAgentInput): Promise<AgentProcessSnapshot> => {
     assertTrustedIpcSender(event);
     if (!/^[a-z][a-z0-9_-]{0,63}$/i.test(input.agentId)) throw new Error("invalid agent id");
+    if (input.bridgeAgentId && !/^[a-z][a-z0-9_-]{0,63}$/i.test(input.bridgeAgentId)) {
+      throw new Error("invalid bridge agent id");
+    }
     const workspacePath = selectedWorkspacePath(input.workspaceId);
     const adapter = createBuiltInAdapter(input.cli, undefined, { env: desktopCliEnvironment() });
     const launch = await adapter.buildLaunchSpec({
